@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Panel</title>
+</head>
+<body>
+    <h1>Admin Panel</h1>
+    <a href="{{ url_for('create_test') }}"><button>Create New Test</button></a>
+
+    <h2>Existing Tests</h2>
+    <table border="1">
+        <tr>
+            <th>Test Name</th>
+            <th>Description</th>
+            <th>Groups with Access</th>
+            <th>Creation Date</th>
+            <th>Expiry Date</th>
+            <th>Number of Questions</th>
+            <th>Scores Needed to Pass</th>
+            <th>Duration (minutes)</th>
+            <th>Number of Attempts</th>
+        </tr>
+        {% for test in tests %}
+        <tr>
+            <td>{{ test.test_name }}</td>
+            <td>{{ test.description or "No description" }}</td>
+            <td>{{ test.groups_with_access or "All groups" }}</td>
+            <td>{{ test.creation_date.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+            <td>{{ test.expiry_date.strftime('%Y-%m-%d %H:%M:%S') if test.expiry_date else "No expiry" }}</td>
+            <td>{{ test.question_count }}</td>
+            <td>{{ test.scores_need_to_pass }}</td>
+            <td>{{ test.duration }}</td>
+            <td>{{ test.number_of_attempts }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
