@@ -1,5 +1,3 @@
-# utils/calculate_score.py
-
 from tools.models import Test, Question  #
 from typing import Dict, Any, List, Tuple
 

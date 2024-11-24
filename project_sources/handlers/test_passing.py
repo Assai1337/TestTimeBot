@@ -1,12 +1,15 @@
+# test_passing.py
+
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from zoneinfo import ZoneInfo
-from tools.config import ADMIN_CHAT_ID
+from tools.config import ADMIN_CHAT_ID, DATABASE_URL
 from aiogram import Router, types, Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.future import select
+from sqlalchemy.orm import sessionmaker
 
 from tools.models import Test, Question, TestAttempt, User
 import logging
@@ -24,7 +27,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 handler = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
@@ -41,52 +45,67 @@ async def notify_admin(bot: Bot, message: str):
             logger.error(f"Не удалось уведомить администратора: {e}")
 
 
-async def monitor_test_time(user_id: int, test_id: int, end_time: datetime, session: AsyncSession, bot: Bot):
+async def monitor_test_time(user_id: int, test_attempt_id: int, end_time: datetime, bot: Bot):
+    # Создаём новый движок и фабрику сессий для использования внутри фоновой задачи
+    engine = create_async_engine(DATABASE_URL, echo=False)
+    async_session = sessionmaker(
+        engine, expire_on_commit=False, class_=AsyncSession)
+
     now = current_time()
     delay = (end_time - now).total_seconds()
     if delay > 0:
         await asyncio.sleep(delay)
 
-    test_attempt_result = await session.execute(
-        select(TestAttempt).where(TestAttempt.test_id == test_id, TestAttempt.user_id == user_id)
-    )
-    test_attempt: Optional[TestAttempt] = test_attempt_result.scalars().first()
-
-    if test_attempt and not test_attempt.passed:
-        test_result = await session.execute(select(Test).where(Test.id == test_id))
-        test: Optional[Test] = test_result.scalars().first()
-        if not test:
-            logger.error(f"Тест с ID {test_id} не найден при мониторинге времени.")
-            return
-
-        questions_result = await session.execute(
-            select(Question).where(Question.test_id == test_id)
+    # Создаём новую сессию
+    async with async_session() as session:
+        # Получаем TestAttempt
+        test_attempt_result = await session.execute(
+            select(TestAttempt).where(TestAttempt.id == test_attempt_id)
         )
-        questions = questions_result.scalars().all()
+        test_attempt: Optional[TestAttempt] = test_attempt_result.scalars().first()
 
-        answers = test_attempt.answers if test_attempt.answers else {}
-        score, passed, detailed_answers = calculate_score(test, answers, questions)
+        if test_attempt and not test_attempt.passed and not test_attempt.end_time:
+            # Получаем Test и Questions
+            test_result = await session.execute(
+                select(Test).where(Test.id == test_attempt.test_id))
+            test: Optional[Test] = test_result.scalars().first()
+            if not test:
+                logger.error(
+                    f"Тест с ID {test_attempt.test_id} не найден при мониторинге времени.")
+                return
 
-        test_attempt.score = score
-        test_attempt.passed = passed
-        test_attempt.end_time = end_time.replace(tzinfo=None)
-        test_attempt.answers = detailed_answers  # Обновляем ответы с информацией о правильности
-
-        try:
-            await session.commit()
-            await bot.send_message(
-                chat_id=user_id,
-                text="Время теста истекло. Ваш тест завершён.\n\n" +
-                     f"**Баллы:** {score}\n" +
-                     f"**Статус:** {'✅ Пройден' if passed else '❌ Не пройден'}",
-                parse_mode='Markdown'
+            questions_result = await session.execute(
+                select(Question).where(Question.test_id == test.id)
             )
-            logger.info(
-                f"Автоматически завершён тест {test_id} для пользователя {user_id} с баллом {score} и статусом {'пройден' if passed else 'не пройден'}.")
-        except Exception as e:
-            await session.rollback()
-            logger.error(f"Ошибка при автоматическом завершении теста: {e}")
-            await notify_admin(bot, f"Ошибка при автоматическом завершении теста: {e}")
+            questions = questions_result.scalars().all()
+
+            answers = test_attempt.answers if test_attempt.answers else {}
+            score, passed, detailed_answers = calculate_score(
+                test, answers, questions)
+
+            test_attempt.score = score
+            test_attempt.passed = passed
+            test_attempt.end_time = end_time.replace(tzinfo=None)
+            test_attempt.answers = detailed_answers  # Обновляем ответы с информацией о правильности
+
+            try:
+                await session.commit()
+                await bot.send_message(
+                    chat_id=user_id,
+                    text="⏰ *Время теста истекло. Ваш тест завершён.*\n\n" +
+                    f"*Баллы:* {score}\n" +
+                    f"*Статус:* {'✅ Пройден' if passed else '❌ Не пройден'}",
+                    parse_mode='Markdown'
+                )
+                logger.info(
+                    f"Автоматически завершён тест {test.id} для пользователя {user_id} с баллом {score} и статусом {'пройден' if passed else 'не пройден'}.")
+            except Exception as e:
+                await session.rollback()
+                logger.error(
+                    f"Ошибка при автоматическом завершении теста: {e}")
+                await notify_admin(
+                    bot, f"Ошибка при автоматическом завершении теста: {e}")
+    await engine.dispose()
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("select_test:"))
@@ -106,7 +125,8 @@ async def start_test(callback: types.CallbackQuery, state: FSMContext, session: 
         await callback.message.answer("Тест не найден.")
         return
 
-    question_result = await session.execute(select(Question).where(Question.test_id == test_id))
+    question_result = await session.execute(
+        select(Question).where(Question.test_id == test_id))
     questions = question_result.scalars().all()
 
     if not questions:
@@ -116,8 +136,43 @@ async def start_test(callback: types.CallbackQuery, state: FSMContext, session: 
     start_time = current_time()
     end_time = start_time + timedelta(minutes=test.duration)
 
+    user_id = callback.from_user.id
+
+    # Получаем пользователя из базы данных
+    user_result = await session.execute(
+        select(User).where(User.user_id == user_id))
+    user: Optional[User] = user_result.scalars().first()
+    if not user:
+        await callback.message.answer("Пользователь не найден в системе.")
+        return
+
+    # Создаём объект TestAttempt
+    test_attempt = TestAttempt(
+        test_id=test_id,
+        user_id=user.id,
+        start_time=start_time.replace(tzinfo=None),
+        end_time=None,  # Будет установлено при завершении теста
+        score=0,
+        passed=False,
+        answers={}  # Пустые ответы в начале
+    )
+
+    try:
+        session.add(test_attempt)
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        logger.error(f"Ошибка при создании попытки теста: {e}")
+        await callback.message.answer(
+            "Произошла ошибка при создании попытки теста. Попробуйте позже.")
+        await notify_admin(
+            bot, f"Ошибка при создании попытки теста: {e}")
+        return
+
+    # Сохраняем test_attempt_id в состоянии
     await state.update_data(
         test_id=test_id,
+        test_attempt_id=test_attempt.id,
         questions=questions,
         current_index=0,
         start_time=start_time,
@@ -129,8 +184,9 @@ async def start_test(callback: types.CallbackQuery, state: FSMContext, session: 
 
     await send_question(callback.message, state)
 
+    # Запускаем мониторинг времени теста
     asyncio.create_task(
-        monitor_test_time(user_id=callback.from_user.id, test_id=test_id, end_time=end_time, session=session, bot=bot))
+        monitor_test_time(user_id=user_id, test_attempt_id=test_attempt.id, end_time=end_time, bot=bot))
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("answer:"))
@@ -145,6 +201,7 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext, sessio
     current_index = test_data["current_index"]
     questions = test_data["questions"]
     current_question: Question = questions[current_index]
+    test_attempt_id = test_data["test_attempt_id"]
 
     answer_id_str = callback.data.split(":")[1]
     if not answer_id_str.isdigit():
@@ -174,12 +231,27 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext, sessio
             logger.info(
                 f"Пользователь {callback.from_user.id} добавил выбор ответа {answer_id_str} для вопроса {current_question.id}")
         # Сортируем и сохраняем ответ
-        test_data["answers"][str(current_question.id)] = ''.join(sorted(current_answer))
+        test_data["answers"][str(current_question.id)] = ''.join(
+            sorted(current_answer))
     else:
         await callback.message.answer("Неподдерживаемый тип вопроса.")
         return
 
     await state.update_data(answers=test_data["answers"])
+
+    # Обновляем TestAttempt в базе данных
+    test_attempt_result = await session.execute(
+        select(TestAttempt).where(TestAttempt.id == test_attempt_id)
+    )
+    test_attempt: Optional[TestAttempt] = test_attempt_result.scalars().first()
+    if test_attempt:
+        test_attempt.answers = test_data["answers"]
+        try:
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            logger.error(f"Ошибка при обновлении попытки теста: {e}")
+
     await send_question(callback.message, state)
 
 
@@ -236,11 +308,12 @@ async def edit_answer(callback: types.CallbackQuery, state: FSMContext, session:
 
 
 @router.message(TestStates.EDITING)
-async def handle_text_edit(message: types.Message, state: FSMContext):
+async def handle_text_edit(message: types.Message, state: FSMContext, session: AsyncSession):
     user_data = await state.get_data()
     logger.debug(f"Handle Text Edit - Current FSM data: {user_data}")
 
     editing_question_id = user_data.get("editing_question_id")
+    test_attempt_id = user_data.get("test_attempt_id")
 
     if not editing_question_id:
         await message.answer("Нет вопроса для редактирования.")
@@ -250,6 +323,19 @@ async def handle_text_edit(message: types.Message, state: FSMContext):
     answers[str(editing_question_id)] = message.text
     logger.debug(f"Updated answers: {answers}")
     await state.update_data(answers=answers)
+
+    # Обновляем TestAttempt в базе данных
+    test_attempt_result = await session.execute(
+        select(TestAttempt).where(TestAttempt.id == test_attempt_id)
+    )
+    test_attempt: Optional[TestAttempt] = test_attempt_result.scalars().first()
+    if test_attempt:
+        test_attempt.answers = answers
+        try:
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            logger.error(f"Ошибка при обновлении попытки теста: {e}")
 
     await state.set_state(TestStates.TESTING.state)
 
@@ -295,6 +381,7 @@ async def confirm_finish_yes(callback: types.CallbackQuery, state: FSMContext, s
     logger.debug(f"Confirm Finish Yes - Current FSM data: {user_data}")
 
     test_id = user_data.get("test_id")
+    test_attempt_id = user_data.get("test_attempt_id")
     answers = user_data.get("answers", {})
     questions = user_data.get("questions", [])
     user_id = callback.from_user.id
@@ -315,39 +402,41 @@ async def confirm_finish_yes(callback: types.CallbackQuery, state: FSMContext, s
 
     score, passed, detailed_answers = calculate_score(test, answers, questions)
 
-    test_attempt = TestAttempt(
-        test_id=test_id,
-        user_id=user.id,
-        start_time=start_time.replace(tzinfo=None),
-        end_time=end_time.replace(tzinfo=None),
-        score=score,
-        passed=passed,
-        answers=detailed_answers
+    # Обновляем TestAttempt
+    test_attempt_result = await session.execute(
+        select(TestAttempt).where(TestAttempt.id == test_attempt_id)
     )
-
-    try:
-        session.add(test_attempt)
-        await session.commit()
-        await callback.message.answer(
-            "Вы успешно завершили тест. Спасибо за участие!\n\n" +
-            f"**Баллы:** {score}\n" +
-            f"**Статус:** {'✅ Пройден' if passed else '❌ Не пройден'}",
-            parse_mode='Markdown'
-        )
-        logger.info(
-            f"Пользователь {user_id} завершил тест {test_id} с баллом {score} и статусом {'пройден' if passed else 'не пройден'}")
-    except Exception as e:
-        await session.rollback()
-        logger.error(f"Ошибка при сохранении результатов теста: {e}")
-        await callback.message.answer("Произошла ошибка при сохранении результатов теста. Попробуйте позже.")
-        await notify_admin(bot, f"Ошибка при сохранении результатов теста: {e}")
-        return
+    test_attempt: Optional[TestAttempt] = test_attempt_result.scalars().first()
+    if test_attempt:
+        test_attempt.score = score
+        test_attempt.passed = passed
+        test_attempt.end_time = end_time.replace(tzinfo=None)
+        test_attempt.answers = detailed_answers
+        try:
+            await session.commit()
+            await callback.message.answer(
+                "Вы успешно завершили тест. Спасибо за участие!\n\n" +
+                f"**Баллы:** {score}\n" +
+                f"**Статус:** {'✅ Пройден' if passed else '❌ Не пройден'}",
+                parse_mode='Markdown'
+            )
+            logger.info(
+                f"Пользователь {user_id} завершил тест {test_id} с баллом {score} и статусом {'пройден' if passed else 'не пройден'}")
+        except Exception as e:
+            await session.rollback()
+            logger.error(f"Ошибка при сохранении результатов теста: {e}")
+            await callback.message.answer(
+                "Произошла ошибка при сохранении результатов теста. Попробуйте позже.")
+            await notify_admin(
+                bot, f"Ошибка при сохранении результатов теста: {e}")
+            return
 
     await state.clear()
 
     disabled_keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="✅ Завершить тест (недоступно)", callback_data="noop")
+            InlineKeyboardButton(
+                text="✅ Завершить тест (недоступно)", callback_data="noop")
         ]
     ])
 
@@ -355,7 +444,8 @@ async def confirm_finish_yes(callback: types.CallbackQuery, state: FSMContext, s
         await callback.message.edit_reply_markup(reply_markup=disabled_keyboard)
         logger.debug("Test finish buttons disabled successfully.")
     except TelegramBadRequest as e:
-        logger.error(f"Ошибка при редактировании кнопок после завершения теста: {e}")
+        logger.error(
+            f"Ошибка при редактировании кнопок после завершения теста: {e}")
     except Exception as e:
         logger.error(f"Неизвестная ошибка при редактировании кнопок: {e}")
 
@@ -373,8 +463,10 @@ async def confirm_finish_no(callback: types.CallbackQuery, state: FSMContext):
     if confirmation_message_id:
         disabled_keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Да (недоступно)", callback_data="noop"),
-                InlineKeyboardButton(text="❌ Нет (завершение отменено)", callback_data="noop")
+                InlineKeyboardButton(
+                    text="✅ Да (недоступно)", callback_data="noop"),
+                InlineKeyboardButton(
+                    text="❌ Нет (завершение отменено)", callback_data="noop")
             ]
         ])
 
@@ -386,7 +478,8 @@ async def confirm_finish_no(callback: types.CallbackQuery, state: FSMContext):
             )
             logger.debug("Confirmation message buttons disabled successfully.")
         except TelegramBadRequest as e:
-            logger.error(f"Ошибка при редактировании сообщения подтверждения: {e}")
+            logger.error(
+                f"Ошибка при редактировании сообщения подтверждения: {e}")
 
         await state.update_data(confirmation_message_id=None)
 
@@ -423,18 +516,16 @@ async def send_question(message: types.Message, state: FSMContext):
         current_answer = answers.get(str(current_question.id), "")
         question_text += f"Текущий ответ: {current_answer if current_answer else 'Нет ответа'}\n\n"
     else:
-        question_text += "Тип вопроса: " + (
-            "множественный выбор" if current_question.question_type == "multiple_choice"
-            else "одиночный выбор" if current_question.question_type == "single_choice"
-            else "неизвестный тип"
-        ) + "\n\n"
+        question_text += "Выберите один или несколько вариантов ответа:\n\n"
 
         for idx, option in enumerate(current_question.options, start=1):
             if current_question.question_type in ["single_choice", "multiple_choice"]:
                 if current_question.question_type == "single_choice":
-                    is_selected = (str(option["id"]) == str(answers.get(str(current_question.id), "")))
+                    is_selected = (
+                        str(option["id"]) == str(answers.get(str(current_question.id), "")))
                 else:
-                    is_selected = (str(option["id"]) in str(answers.get(str(current_question.id), "")))
+                    is_selected = (
+                        str(option["id"]) in str(answers.get(str(current_question.id), "")))
 
                 checkmark = "✅" if is_selected else ""
                 question_text += f"{idx}. {option['text']} {checkmark}\n"
@@ -445,7 +536,7 @@ async def send_question(message: types.Message, state: FSMContext):
     if current_question.question_type == "text_input":
         buttons.append([
             InlineKeyboardButton(
-                text="Редактировать ответ",
+                text="✏️ Редактировать ответ",
                 callback_data=f"edit_answer:{current_question.id}"
             )
         ])
@@ -453,9 +544,11 @@ async def send_question(message: types.Message, state: FSMContext):
         option_buttons = []
         for idx, option in enumerate(current_question.options, start=1):
             if current_question.question_type == "single_choice":
-                is_selected = (str(option["id"]) == str(answers.get(str(current_question.id), "")))
+                is_selected = (
+                    str(option["id"]) == str(answers.get(str(current_question.id), "")))
             elif current_question.question_type == "multiple_choice":
-                is_selected = (str(option["id"]) in str(answers.get(str(current_question.id), "")))
+                is_selected = (
+                    str(option["id"]) in str(answers.get(str(current_question.id), "")))
             else:
                 is_selected = False
 
@@ -472,12 +565,17 @@ async def send_question(message: types.Message, state: FSMContext):
 
     navigation_buttons = []
     if current_index > 0:
-        navigation_buttons.append(InlineKeyboardButton(text="⬅️ Назад", callback_data="navigate:prev"))
-    navigation_buttons.append(InlineKeyboardButton(text=f"{current_index + 1}/{len(questions)}", callback_data="noop"))
+        navigation_buttons.append(InlineKeyboardButton(
+            text="⬅️ Назад", callback_data="navigate:prev"))
+    navigation_buttons.append(InlineKeyboardButton(
+        text=f"{current_index + 1}/{len(questions)}", callback_data="noop"))
     if current_index < len(questions) - 1:
-        navigation_buttons.append(InlineKeyboardButton(text="➡️ Вперед", callback_data="navigate:next"))
+        navigation_buttons.append(InlineKeyboardButton(
+            text="➡️ Вперед", callback_data="navigate:next"))
 
-    navigation_buttons.append(InlineKeyboardButton(text="✅ Завершить тест", callback_data="finish_test"))
+    if current_index == len(questions) - 1:
+        navigation_buttons.append(InlineKeyboardButton(
+            text="✅ Завершить тест", callback_data="finish_test"))
 
     if navigation_buttons:
         buttons.append(navigation_buttons)

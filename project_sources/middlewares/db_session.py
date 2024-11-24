@@ -4,7 +4,6 @@ from typing import Any, Dict, Callable, Awaitable
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 import logging
 
-
 class DbSessionMiddleware(BaseMiddleware):
     def __init__(self, session_maker: async_sessionmaker):
         self.session_maker = session_maker

@@ -1,15 +1,12 @@
-# bot/utils/decorators.py
-
 from aiogram import types
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from functools import wraps
 import logging
 
-from tools.states import TestStates  # Импортируем TestStates из states.py
+from tools.states import TestStates
 
 logger = logging.getLogger(__name__)
-
 
 def check_active_test(handler):
     @wraps(handler)
