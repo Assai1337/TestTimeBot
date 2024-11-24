@@ -2,6 +2,7 @@
 import json  # Импортируем модуль json для десериализации
 from typing import Optional, List, Dict, Any, Set
 from aiogram import Router, types
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import StateFilter
