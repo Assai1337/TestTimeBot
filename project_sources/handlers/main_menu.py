@@ -157,7 +157,7 @@ async def available_tests_handler(message: types.Message, session: AsyncSession)
         logger.info(f"Пользователь: {user.firstname} {user.lastname}, Группа: {user.group}")
 
         # Текущая дата и время
-        current_time = datetime.utcnow()
+        current_time = datetime.now(ZoneInfo("Europe/Moscow")).replace(tzinfo=None)
 
         # Подготовка запроса с подсчетом попыток
         stmt = (

@@ -34,7 +34,8 @@ logger.addHandler(handler)
 
 
 def current_time():
-    return datetime.now(ZoneInfo("Europe/Moscow"))
+    # Возвращаем timezone-naive datetime в часовом поясе Europe/Moscow
+    return datetime.now(ZoneInfo("Europe/Moscow")).replace(tzinfo=None)
 
 
 async def notify_admin(bot: Bot, message: str):
@@ -55,6 +56,9 @@ async def monitor_test_time(user_id: int, test_attempt_id: int, end_time: dateti
     delay = (end_time - now).total_seconds()
     if delay > 0:
         await asyncio.sleep(delay)
+    else:
+        # Если время уже истекло, завершаем сразу
+        delay = 0
 
     # Создаём новую сессию
     async with async_session() as session:
@@ -64,7 +68,8 @@ async def monitor_test_time(user_id: int, test_attempt_id: int, end_time: dateti
         )
         test_attempt: Optional[TestAttempt] = test_attempt_result.scalars().first()
 
-        if test_attempt and not test_attempt.passed and not test_attempt.end_time:
+        if test_attempt and not test_attempt.passed and current_time() >= test_attempt.end_time:
+            # Тест ещё не завершён и время истекло
             # Получаем Test и Questions
             test_result = await session.execute(
                 select(Test).where(Test.id == test_attempt.test_id))
@@ -85,7 +90,7 @@ async def monitor_test_time(user_id: int, test_attempt_id: int, end_time: dateti
 
             test_attempt.score = score
             test_attempt.passed = passed
-            test_attempt.end_time = end_time.replace(tzinfo=None)
+            test_attempt.end_time = current_time()  # Обновляем фактическое время завершения
             test_attempt.answers = detailed_answers  # Обновляем ответы с информацией о правильности
 
             try:
@@ -146,12 +151,12 @@ async def start_test(callback: types.CallbackQuery, state: FSMContext, session: 
         await callback.message.answer("Пользователь не найден в системе.")
         return
 
-    # Создаём объект TestAttempt
+    # Создаём объект TestAttempt с установленным end_time
     test_attempt = TestAttempt(
         test_id=test_id,
         user_id=user.id,
-        start_time=start_time.replace(tzinfo=None),
-        end_time=None,  # Будет установлено при завершении теста
+        start_time=start_time,
+        end_time=end_time,  # Устанавливаем предполагаемое время окончания
         score=0,
         passed=False,
         answers={}  # Пустые ответы в начале
@@ -410,7 +415,7 @@ async def confirm_finish_yes(callback: types.CallbackQuery, state: FSMContext, s
     if test_attempt:
         test_attempt.score = score
         test_attempt.passed = passed
-        test_attempt.end_time = end_time.replace(tzinfo=None)
+        test_attempt.end_time = end_time  # Обновляем фактическое время завершения
         test_attempt.answers = detailed_answers
         try:
             await session.commit()
@@ -507,8 +512,21 @@ async def send_question(message: types.Message, state: FSMContext):
     current_question: Question = questions[current_index]
     answers: Dict[str, Any] = user_data.get("answers", {})
 
+    # Получаем оставшееся время
+    end_time = user_data.get("end_time")
+    if end_time:
+        time_left = end_time - current_time()
+        if time_left.total_seconds() > 0:
+            minutes, seconds = divmod(int(time_left.total_seconds()), 60)
+            time_left_str = f"{minutes} мин {seconds} сек"
+        else:
+            time_left_str = "0 мин 0 сек"
+    else:
+        time_left_str = "неизвестно"
+
     question_text = (
-        f"Вопрос {current_index + 1}/{len(questions)}:\n\n"
+        f"Вопрос {current_index + 1}/{len(questions)}\n"
+        f"(Оставшееся время: {time_left_str})\n\n"
         f"{current_question.question_text}\n\n"
     )
 
@@ -516,16 +534,24 @@ async def send_question(message: types.Message, state: FSMContext):
         current_answer = answers.get(str(current_question.id), "")
         question_text += f"Текущий ответ: {current_answer if current_answer else 'Нет ответа'}\n\n"
     else:
-        question_text += "Выберите один или несколько вариантов ответа:\n\n"
+        # Здесь изменяем текст инструкции в зависимости от типа вопроса
+        if current_question.question_type == "single_choice":
+            question_text += "Выберите один вариант ответа:\n\n"
+        elif current_question.question_type == "multiple_choice":
+            question_text += "Выберите один или несколько вариантов ответа:\n\n"
+        else:
+            question_text += "Выберите вариант ответа:\n\n"
 
         for idx, option in enumerate(current_question.options, start=1):
             if current_question.question_type in ["single_choice", "multiple_choice"]:
                 if current_question.question_type == "single_choice":
                     is_selected = (
                         str(option["id"]) == str(answers.get(str(current_question.id), "")))
-                else:
+                elif current_question.question_type == "multiple_choice":
                     is_selected = (
                         str(option["id"]) in str(answers.get(str(current_question.id), "")))
+                else:
+                    is_selected = False
 
                 checkmark = "✅" if is_selected else ""
                 question_text += f"{idx}. {option['text']} {checkmark}\n"
@@ -573,9 +599,8 @@ async def send_question(message: types.Message, state: FSMContext):
         navigation_buttons.append(InlineKeyboardButton(
             text="➡️ Вперед", callback_data="navigate:next"))
 
-    if current_index == len(questions) - 1:
-        navigation_buttons.append(InlineKeyboardButton(
-            text="✅ Завершить тест", callback_data="finish_test"))
+    navigation_buttons.append(InlineKeyboardButton(
+        text="✅ Завершить тест", callback_data="finish_test"))
 
     if navigation_buttons:
         buttons.append(navigation_buttons)
