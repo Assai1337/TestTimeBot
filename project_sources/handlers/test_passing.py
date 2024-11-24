@@ -48,7 +48,7 @@ async def notify_admin(bot: Bot, message: str):
             logger.error(f"Не удалось уведомить администратора: {e}")
 
 
-async def monitor_test_time(user_id: int, test_attempt_id: int, end_time: datetime, bot: Bot):
+async def monitor_test_time(user_id: int, test_attempt_id: int, end_time: datetime, bot: Bot, state: FSMContext):
     # Создаём новый движок и фабрику сессий для использования внутри фоновой задачи
     engine = create_async_engine(DATABASE_URL, echo=False)
     async_session = sessionmaker(
@@ -100,18 +100,23 @@ async def monitor_test_time(user_id: int, test_attempt_id: int, end_time: dateti
                 await bot.send_message(
                     chat_id=user_id,
                     text="⏰ *Время теста истекло. Ваш тест завершён.*\n\n" +
-                    f"*Баллы:* {score}\n" +
-                    f"*Статус:* {'✅ Пройден' if passed else '❌ Не пройден'}",
+                         f"*Баллы:* {score}\n" +
+                         f"*Статус:* {'✅ Пройден' if passed else '❌ Не пройден'}",
                     parse_mode='Markdown'
                 )
                 logger.info(
                     f"Автоматически завершён тест {test.id} для пользователя {user_id} с баллом {score} и статусом {'пройден' if passed else 'не пройден'}.")
+
+                # Очистка состояния
+                await state.clear()
+                logger.debug(f"State cleared for user {user_id} after auto-finishing test.")
             except Exception as e:
                 await session.rollback()
                 logger.error(
                     f"Ошибка при автоматическом завершении теста: {e}")
                 await notify_admin(
                     bot, f"Ошибка при автоматическом завершении теста: {e}")
+
     await engine.dispose()
 
 
@@ -206,7 +211,13 @@ async def start_test(callback: types.CallbackQuery, state: FSMContext, session: 
 
     # Запускаем мониторинг времени теста
     asyncio.create_task(
-        monitor_test_time(user_id=user_id, test_attempt_id=test_attempt.id, end_time=end_time, bot=bot)
+        monitor_test_time(
+            user_id=user_id,
+            test_attempt_id=test_attempt.id,
+            end_time=end_time,
+            bot=bot,
+            state=state
+        )
     )
 
 
