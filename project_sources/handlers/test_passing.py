@@ -1,15 +1,16 @@
 # test_passing.py
 
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from zoneinfo import ZoneInfo
 from tools.config import ADMIN_CHAT_ID, DATABASE_URL
 from aiogram import Router, types, Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
+from aiogram.filters import StateFilter  # Добавляем импорт StateFilter
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.future import select
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, selectinload
 
 from tools.models import Test, Question, TestAttempt, User
 import logging
@@ -23,6 +24,7 @@ import asyncio
 
 router = Router()
 
+# Настройка логирования
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -117,6 +119,14 @@ async def monitor_test_time(user_id: int, test_attempt_id: int, end_time: dateti
 async def start_test(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession, bot: Bot):
     await callback.answer()
 
+    # Проверка, находится ли пользователь уже в процессе прохождения теста
+    current_state = await state.get_state()
+    if current_state == TestStates.TESTING.state:
+        await callback.message.edit_text(
+            "Вы уже проходите тест. Пожалуйста, завершите текущий тест перед началом нового."
+        )
+        return
+
     test_id_str = callback.data.split(":")[1]
     if not test_id_str.isdigit():
         await callback.message.answer("Некорректный ID теста.")
@@ -169,12 +179,14 @@ async def start_test(callback: types.CallbackQuery, state: FSMContext, session: 
         await session.rollback()
         logger.error(f"Ошибка при создании попытки теста: {e}")
         await callback.message.answer(
-            "Произошла ошибка при создании попытки теста. Попробуйте позже.")
+            "Произошла ошибка при создании попытки теста. Попробуйте позже."
+        )
         await notify_admin(
-            bot, f"Ошибка при создании попытки теста: {e}")
+            bot, f"Ошибка при создании попытки теста: {e}"
+        )
         return
 
-    # Сохраняем test_attempt_id в состоянии
+    # Сохраняем test_attempt_id и message_id в состоянии
     await state.update_data(
         test_id=test_id,
         test_attempt_id=test_attempt.id,
@@ -183,15 +195,19 @@ async def start_test(callback: types.CallbackQuery, state: FSMContext, session: 
         start_time=start_time,
         end_time=end_time,
         answers={},
-        message_id=callback.message.message_id
+        message_id=callback.message.message_id  # Сохраняем ID сообщения для редактирования
     )
     await state.set_state(TestStates.TESTING.state)
 
+    # Отправляем первый вопрос, редактируя сообщение с выбором теста
     await send_question(callback.message, state)
+
+    # Отключаем кнопки выбора теста, так как сообщение уже отредактировано в send_question
 
     # Запускаем мониторинг времени теста
     asyncio.create_task(
-        monitor_test_time(user_id=user_id, test_attempt_id=test_attempt.id, end_time=end_time, bot=bot))
+        monitor_test_time(user_id=user_id, test_attempt_id=test_attempt.id, end_time=end_time, bot=bot)
+    )
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("answer:"))
@@ -204,7 +220,7 @@ async def handle_answer(callback: types.CallbackQuery, state: FSMContext, sessio
 
     test_data = user_data
     current_index = test_data["current_index"]
-    questions = test_data["questions"]
+    questions: List[Question] = test_data["questions"]
     current_question: Question = questions[current_index]
     test_attempt_id = test_data["test_attempt_id"]
 
@@ -270,7 +286,7 @@ async def navigate_question(callback: types.CallbackQuery, state: FSMContext):
 
     action = callback.data.split(":")[1]
     current_index = user_data["current_index"]
-    questions = user_data["questions"]
+    questions: List[Question] = user_data["questions"]
 
     if action == "next" and current_index < len(questions) - 1:
         current_index += 1
@@ -294,7 +310,7 @@ async def edit_answer(callback: types.CallbackQuery, state: FSMContext, session:
 
     test_data = user_data
     current_index = test_data["current_index"]
-    questions = test_data["questions"]
+    questions: List[Question] = test_data["questions"]
     current_question: Question = questions[current_index]
 
     if current_question.question_type != "text_input":
@@ -431,9 +447,11 @@ async def confirm_finish_yes(callback: types.CallbackQuery, state: FSMContext, s
             await session.rollback()
             logger.error(f"Ошибка при сохранении результатов теста: {e}")
             await callback.message.answer(
-                "Произошла ошибка при сохранении результатов теста. Попробуйте позже.")
+                "Произошла ошибка при сохранении результатов теста. Попробуйте позже."
+            )
             await notify_admin(
-                bot, f"Ошибка при сохранении результатов теста: {e}")
+                bot, f"Ошибка при сохранении результатов теста: {e}"
+            )
             return
 
     await state.clear()
@@ -507,7 +525,7 @@ async def send_question(message: types.Message, state: FSMContext):
         await message.answer("Ваше тестирование не активно.")
         return
 
-    questions: list[Question] = user_data["questions"]
+    questions: List[Question] = user_data["questions"]
     current_index: int = user_data["current_index"]
     current_question: Question = questions[current_index]
     answers: Dict[str, Any] = user_data.get("answers", {})

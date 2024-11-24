@@ -1,5 +1,5 @@
 # handlers/main_menu.py
-from typing import List
+from typing import List, Tuple, Optional
 from zoneinfo import ZoneInfo
 import re
 from datetime import datetime
@@ -13,6 +13,7 @@ from sqlalchemy.future import select
 from sqlalchemy import func
 from tools.models import User, Group, Test, TestAttempt
 from tools.config import ADMIN_USERNAME
+from tools.states import TestStates  # Импортируем TestStates
 import logging
 
 router = Router()
@@ -29,6 +30,16 @@ logger.addHandler(handler)
 # Состояния для FSM
 class Registration(StatesGroup):
     awaiting_user_data = State()
+
+# Вспомогательная функция для проверки, находится ли пользователь в состоянии тестирования
+async def is_user_testing(state: FSMContext) -> bool:
+    current_state = await state.get_state()
+    testing_states = [
+        TestStates.TESTING.state,
+        TestStates.EDITING.state,
+        TestStates.CONFIRM_FINISH.state
+    ]
+    return current_state in testing_states
 
 # Функция для создания главного меню
 def get_main_menu(username: str) -> ReplyKeyboardMarkup:
@@ -140,9 +151,14 @@ async def admin_panel_handler(message: types.Message):
     else:
         await message.answer("У вас нет доступа к админ панели.")
 
-# Обработчик кнопки "Доступные тесты"
+# Обработчик кнопки "Доступные тесты" с проверкой состояния
 @router.message(lambda message: message.text == "Доступные тесты")
-async def available_tests_handler(message: types.Message, session: AsyncSession):
+async def available_tests_handler(message: types.Message, state: FSMContext, session: AsyncSession):
+    # Проверяем, находится ли пользователь в состоянии тестирования
+    if await is_user_testing(state):
+        await message.answer("Вы сейчас проходите тест. Пожалуйста, завершите текущий тест перед тем, как начинать другой.")
+        return
+
     logger.info("Обработчик 'Доступные тесты' вызван")
 
     try:

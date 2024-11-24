@@ -1,4 +1,6 @@
-from typing import Optional, List, Dict, Any
+# handlers/results.py
+import json  # Импортируем модуль json для десериализации
+from typing import Optional, List, Dict, Any, Set
 from aiogram import Router, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
@@ -27,14 +29,27 @@ logger.addHandler(handler)
 ITEMS_PER_PAGE = 8  # Количество элементов на странице
 
 
-def create_tests_keyboard(tests: List[Test], page: int, total_pages: int) -> InlineKeyboardMarkup:
+# Вспомогательная функция для проверки, находится ли пользователь в состоянии тестирования
+async def is_user_testing(state: FSMContext) -> bool:
+    current_state = await state.get_state()
+    testing_states = [
+        TestStates.TESTING.state,
+        TestStates.EDITING.state,
+        TestStates.CONFIRM_FINISH.state
+    ]
+    return current_state in testing_states
+
+
+def create_tests_keyboard(tests: List[Test], page: int, total_pages: int,
+                          passed_tests_ids: Set[int]) -> InlineKeyboardMarkup:
     """
     Создаёт клавиатуру с тестами и кнопками навигации.
+    Добавляет галочку рядом с названием теста, если у пользователя есть успешная попытка.
     """
     buttons = [
         [
             InlineKeyboardButton(
-                text=f"{test.test_name}",
+                text=f"{test.test_name} {'✅' if test.id in passed_tests_ids else ''}",
                 callback_data=f"view_results_test:{test.id}"
             )
         ] for test in tests
@@ -58,14 +73,30 @@ def create_tests_keyboard(tests: List[Test], page: int, total_pages: int) -> Inl
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def create_attempts_keyboard(attempts: List[TestAttempt], page: int, total_pages: int, test_id: int, max_score: int) -> InlineKeyboardMarkup:
+def create_attempts_keyboard(attempts: List[TestAttempt], page: int, total_pages: int, test_id: int,
+                             max_score: int) -> InlineKeyboardMarkup:
     """
     Создаёт клавиатуру с попытками и кнопками навигации.
     """
     buttons = []
     for attempt in attempts:
-        # Подсчет набранных баллов
-        attempt_score = sum(1 for ans in attempt.answers.values() if ans.get('correct'))
+        try:
+            # Предполагаем, что attempt.answers всегда строка JSON
+            if isinstance(attempt.answers, str):
+                answers_dict = json.loads(attempt.answers)
+            else:
+                logger.error(f"Ожидалась строка JSON для attempt.answers, но получен тип: {type(attempt.answers)}")
+                answers_dict = {}
+
+            # Подсчет набранных баллов
+            attempt_score = sum(1 for ans in answers_dict.values() if isinstance(ans, dict) and ans.get('correct'))
+        except json.JSONDecodeError as e:
+            logger.error(f"Ошибка десериализации answers для попытки {attempt.id}: {e}")
+            attempt_score = 0
+        except Exception as e:
+            logger.error(f"Неизвестная ошибка при обработке attempt.answers для попытки {attempt.id}: {e}")
+            attempt_score = 0
+
         attempt_date = attempt.start_time.strftime('%Y-%m-%d %H:%M')
         passed_symbol = '✅' if attempt.passed else '❌'
         button_text = f"Попытка от {attempt_date} - {attempt_score}/{max_score} - {passed_symbol}"
@@ -120,6 +151,12 @@ async def show_results_menu(message: types.Message, session: AsyncSession, state
         f"Обработчик 'Пройденные тесты' вызван для пользователя {message.from_user.username}")
     user_id = message.from_user.id
 
+    # Проверяем, находится ли пользователь в состоянии тестирования
+    if await is_user_testing(state):
+        await message.answer(
+            "Вы сейчас проходите тест. Пожалуйста, завершите текущий тест перед тем, как просматривать пройденные тесты.")
+        return
+
     # Получение объекта пользователя
     user_result = await session.execute(select(User).where(User.user_id == user_id))
     user: Optional[User] = user_result.scalars().first()
@@ -142,9 +179,12 @@ async def show_results_menu(message: types.Message, session: AsyncSession, state
 
     # Получение уникальных тестов в порядке последней попытки
     tests_dict = {}
+    passed_tests_ids = set()
     for attempt in attempts:
         if attempt.test_id not in tests_dict:
             tests_dict[attempt.test_id] = attempt.test
+        if attempt.passed:
+            passed_tests_ids.add(attempt.test_id)
 
     tests = list(tests_dict.values())
 
@@ -155,7 +195,7 @@ async def show_results_menu(message: types.Message, session: AsyncSession, state
     paginated_tests = tests[:ITEMS_PER_PAGE]
 
     keyboard = create_tests_keyboard(
-        paginated_tests, current_page, total_pages)
+        paginated_tests, current_page, total_pages, passed_tests_ids)
 
     await message.answer("Выберите тест для просмотра попыток:", reply_markup=keyboard)
     await state.set_state(TestStates.VIEWING_TESTS)
@@ -174,13 +214,17 @@ async def paginate_tests(callback: types.CallbackQuery, session: AsyncSession, s
 
     user_id = callback.from_user.id
 
+    # Проверяем, находится ли пользователь в состоянии тестирования
+    if await is_user_testing(state):
+        await callback.message.edit_text(
+            "Вы сейчас проходите тест. Пожалуйста, завершите текущий тест перед тем, как просматривать пройденные тесты.")
+        return
+
     # Получение объекта пользователя
-    user_result = await session.execute(
-        select(User).where(User.user_id == user_id))
+    user_result = await session.execute(select(User).where(User.user_id == user_id))
     user: Optional[User] = user_result.scalars().first()
     if not user:
-        await callback.message.answer(
-            "Пользователь не зарегистрирован в системе.")
+        await callback.message.answer("Пользователь не зарегистрирован в системе.")
         return
 
     # Получение всех попыток пользователя с предзагрузкой тестов
@@ -193,15 +237,17 @@ async def paginate_tests(callback: types.CallbackQuery, session: AsyncSession, s
     attempts = result.scalars().all()
 
     if not attempts:
-        await callback.message.answer(
-            "У вас пока нет попыток прохождения тестов.")
+        await callback.message.answer("У вас пока нет попыток прохождения тестов.")
         return
 
     # Получение уникальных тестов в порядке последней попытки
     tests_dict = {}
+    passed_tests_ids = set()
     for attempt in attempts:
         if attempt.test_id not in tests_dict:
             tests_dict[attempt.test_id] = attempt.test
+        if attempt.passed:
+            passed_tests_ids.add(attempt.test_id)
 
     tests = list(tests_dict.values())
 
@@ -216,16 +262,26 @@ async def paginate_tests(callback: types.CallbackQuery, session: AsyncSession, s
     end_index = start_index + ITEMS_PER_PAGE
     paginated_tests = tests[start_index:end_index]
 
-    keyboard = create_tests_keyboard(paginated_tests, page, total_pages)
+    keyboard = create_tests_keyboard(
+        paginated_tests, page, total_pages, passed_tests_ids)
 
     await callback.message.edit_text(
         "Выберите тест для просмотра попыток:", reply_markup=keyboard)
     await state.set_state(TestStates.VIEWING_TESTS)
 
 
-@router.callback_query(StateFilter(TestStates.VIEWING_TESTS), lambda c: c.data and c.data.startswith("view_results_test:"))
+@router.callback_query(StateFilter(TestStates.VIEWING_TESTS),
+                       lambda c: c.data and c.data.startswith("view_results_test:"))
 async def select_test(callback: types.CallbackQuery, session: AsyncSession, state: FSMContext):
     await callback.answer()
+
+    user_id = callback.from_user.id
+
+    # Проверяем, находится ли пользователь в состоянии тестирования
+    if await is_user_testing(state):
+        await callback.message.edit_text(
+            "Вы сейчас проходите тест. Пожалуйста, завершите текущий тест перед тем, как просматривать пройденные тесты.")
+        return
 
     try:
         _, test_id_str = callback.data.split(":")
@@ -234,17 +290,11 @@ async def select_test(callback: types.CallbackQuery, session: AsyncSession, stat
         await callback.message.answer("Некорректный ID теста.")
         return
 
-    user_id = callback.from_user.id
-
     # Получение объекта пользователя
-    user_result = await session.execute(
-        select(User).where(User.user_id == user_id)
-    )
+    user_result = await session.execute(select(User).where(User.user_id == user_id))
     user: Optional[User] = user_result.scalars().first()
     if not user:
-        await callback.message.answer(
-            "Пользователь не зарегистрирован в системе."
-        )
+        await callback.message.answer("Пользователь не зарегистрирован в системе.")
         return
 
     # Получение попыток для выбранного теста
@@ -256,9 +306,7 @@ async def select_test(callback: types.CallbackQuery, session: AsyncSession, stat
     attempts = result.scalars().all()
 
     if not attempts:
-        await callback.message.answer(
-            "У вас нет попыток для этого теста."
-        )
+        await callback.message.answer("У вас нет попыток для этого теста.")
         return
 
     # Загрузка теста с вопросами для получения максимального количества баллов
@@ -281,6 +329,9 @@ async def select_test(callback: types.CallbackQuery, session: AsyncSession, stat
 
     paginated_attempts = attempts[:ITEMS_PER_PAGE]
 
+    # Определяем, есть ли у пользователя успешные попытки для этого теста
+    passed_tests_ids = {test_id} if any(attempt.passed for attempt in attempts) else set()
+
     keyboard = create_attempts_keyboard(
         paginated_attempts, current_page, total_pages, test_id, max_score
     )
@@ -292,7 +343,8 @@ async def select_test(callback: types.CallbackQuery, session: AsyncSession, stat
     await state.set_state(TestStates.VIEWING_ATTEMPTS)
 
 
-@router.callback_query(StateFilter(TestStates.VIEWING_ATTEMPTS), lambda c: c.data and c.data.startswith("attempts_page:"))
+@router.callback_query(StateFilter(TestStates.VIEWING_ATTEMPTS),
+                       lambda c: c.data and c.data.startswith("attempts_page:"))
 async def paginate_attempts(callback: types.CallbackQuery, session: AsyncSession, state: FSMContext):
     await callback.answer()
 
@@ -306,18 +358,20 @@ async def paginate_attempts(callback: types.CallbackQuery, session: AsyncSession
 
     user_id = callback.from_user.id
 
-    # Получение объекта пользователя
-    user_result = await session.execute(
-        select(User).where(User.user_id == user_id)
-    )
-    user: Optional[User] = user_result.scalars().first()
-    if not user:
-        await callback.message.answer(
-            "Пользователь не зарегистрирован в системе."
-        )
+    # Проверяем, находится ли пользователь в состоянии тестирования
+    if await is_user_testing(state):
+        await callback.message.edit_text(
+            "Вы сейчас проходите тест. Пожалуйста, завершите текущий тест перед тем, как просматривать пройденные тесты.")
         return
 
-    # Получение попыток для выбранного теста
+    # Получение объекта пользователя
+    user_result = await session.execute(select(User).where(User.user_id == user_id))
+    user: Optional[User] = user_result.scalars().first()
+    if not user:
+        await callback.message.answer("Пользователь не зарегистрирован в системе.")
+        return
+
+    # Получение попыток пользователя для выбранного теста
     result = await session.execute(
         select(TestAttempt)
         .where(TestAttempt.user_id == user.id, TestAttempt.test_id == test_id)
@@ -326,9 +380,7 @@ async def paginate_attempts(callback: types.CallbackQuery, session: AsyncSession
     attempts = result.scalars().all()
 
     if not attempts:
-        await callback.message.answer(
-            "У вас нет попыток для этого теста."
-        )
+        await callback.message.answer("У вас нет попыток для этого теста.")
         return
 
     # Загрузка теста с вопросами для получения максимального количества баллов
@@ -344,6 +396,7 @@ async def paginate_attempts(callback: types.CallbackQuery, session: AsyncSession
 
     max_score = len(test.questions)
 
+    # Пагинация
     total_pages = (len(attempts) + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
 
     if page < 1 or page > total_pages:
@@ -361,13 +414,21 @@ async def paginate_attempts(callback: types.CallbackQuery, session: AsyncSession
     await callback.message.edit_text(
         "Выберите попытку для просмотра результатов:", reply_markup=keyboard
     )
-    await state.update_data(selected_test_id=test_id, max_score=max_score)
     await state.set_state(TestStates.VIEWING_ATTEMPTS)
 
 
-@router.callback_query(StateFilter(TestStates.VIEWING_ATTEMPTS), lambda c: c.data and c.data.startswith("view_attempt:"))
+@router.callback_query(StateFilter(TestStates.VIEWING_ATTEMPTS),
+                       lambda c: c.data and c.data.startswith("view_attempt:"))
 async def view_attempt(callback: types.CallbackQuery, session: AsyncSession, state: FSMContext):
     await callback.answer()
+
+    user_id = callback.from_user.id
+
+    # Проверяем, находится ли пользователь в состоянии тестирования
+    if await is_user_testing(state):
+        await callback.message.edit_text(
+            "Вы сейчас проходите тест. Пожалуйста, завершите текущий тест перед тем, как просматривать пройденные тесты.")
+        return
 
     try:
         _, attempt_id_str = callback.data.split(":")
@@ -398,11 +459,22 @@ async def view_attempt(callback: types.CallbackQuery, session: AsyncSession, sta
         return
 
     # Сохранение необходимых данных в состоянии
+    try:
+        # Предполагаем, что attempt.answers всегда строка JSON
+        if isinstance(attempt.answers, str):
+            attempt_answers_dict = json.loads(attempt.answers)
+        else:
+            logger.error(f"Ожидалась строка JSON для attempt.answers, но получен тип: {type(attempt.answers)}")
+            attempt_answers_dict = {}
+    except json.JSONDecodeError as e:
+        logger.error(f"Ошибка десериализации answers для попытки {attempt.id}: {e}")
+        attempt_answers_dict = {}
+
     await state.update_data(
         attempt_id=attempt_id,
         questions=questions,
         question_index=0,
-        attempt_answers=attempt.answers  # Должен быть словарь с ID вопросов в качестве ключей
+        attempt_answers=attempt_answers_dict  # Теперь это словарь
     )
     await state.set_state(TestStates.VIEWING_ATTEMPT_DETAILS)
 
@@ -410,7 +482,8 @@ async def view_attempt(callback: types.CallbackQuery, session: AsyncSession, sta
     await send_attempt_question(callback.message, state)
 
 
-@router.callback_query(StateFilter(TestStates.VIEWING_ATTEMPT_DETAILS), lambda c: c.data and c.data.startswith("attempt_nav:"))
+@router.callback_query(StateFilter(TestStates.VIEWING_ATTEMPT_DETAILS),
+                       lambda c: c.data and c.data.startswith("attempt_nav:"))
 async def navigate_attempt_questions(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
@@ -420,6 +493,12 @@ async def navigate_attempt_questions(callback: types.CallbackQuery, state: FSMCo
         question_index = int(question_index_str)
     except ValueError:
         await callback.message.answer("Некорректные данные навигации.")
+        return
+
+    # Проверяем, находится ли пользователь в состоянии тестирования
+    if await is_user_testing(state):
+        await callback.message.edit_text(
+            "Вы сейчас проходите тест. Пожалуйста, завершите текущий тест перед тем, как просматривать пройденные тесты.")
         return
 
     await state.update_data(
@@ -447,8 +526,8 @@ async def send_attempt_question(message: types.Message, state: FSMContext):
     is_correct = False
 
     if user_answer_entry is not None:
-        user_answer = user_answer_entry.get('user_answer')
         is_correct = user_answer_entry.get('correct', False)
+        user_answer = user_answer_entry.get('user_answer', None)
     else:
         user_answer = None
         is_correct = False
@@ -462,7 +541,6 @@ async def send_attempt_question(message: types.Message, state: FSMContext):
         # Сортируем по длине идентификаторов в обратном порядке
         option_ids.sort(key=lambda x: -len(x))
         for option_id in option_ids:
-            count = remaining_answer.count(option_id)
             while option_id in remaining_answer:
                 user_answer_list.append(option_id)
                 # Удаляем найденный идентификатор из оставшейся строки
@@ -476,14 +554,18 @@ async def send_attempt_question(message: types.Message, state: FSMContext):
     if current_question.question_type in ['single_choice', 'multiple_choice']:
         options_text = ""
         for idx, option in enumerate(current_question.options, start=1):
-            option_id_str = str(option['id'])
-            selected = False
-            if user_answer_list:
-                if current_question.question_type == 'single_choice':
-                    selected = option_id_str == str(user_answer_list)
-                elif current_question.question_type == 'multiple_choice':
-                    selected = option_id_str in user_answer_list
-            options_text += f"{idx}. {option['text']}{' ✅' if selected else ''}\n"
+            if current_question.question_type in ["single_choice", "multiple_choice"]:
+                if current_question.question_type == "single_choice":
+                    is_selected = (
+                            str(option["id"]) == str(answers.get(str(current_question.id), "")))
+                elif current_question.question_type == "multiple_choice":
+                    is_selected = (
+                            str(option["id"]) in str(answers.get(str(current_question.id), "")))
+                else:
+                    is_selected = False
+
+                checkmark = "✅" if is_selected else ""
+                options_text += f"{idx}. {option['text']} {checkmark}\n"
         question_text += options_text
     elif current_question.question_type == 'text_input':
         if user_answer:
@@ -500,8 +582,7 @@ async def send_attempt_question(message: types.Message, state: FSMContext):
     await message.edit_text(question_text, reply_markup=keyboard)
 
 
-
-@router.callback_query(StateFilter(TestStates.VIEWING_ATTEMPT_DETAILS), lambda c: c.data == "back_to_attempts")
+@router.callback_query(StateFilter(TestStates.VIEWING_ATTEMPTS), lambda c: c.data == "back_to_attempts")
 async def back_to_attempts(callback: types.CallbackQuery, session: AsyncSession, state: FSMContext):
     await callback.answer()
 
@@ -511,9 +592,15 @@ async def back_to_attempts(callback: types.CallbackQuery, session: AsyncSession,
         await callback.message.answer("Ошибка возврата к списку попыток.")
         return
 
-    # Получение попыток для теста
     user_id = callback.from_user.id
 
+    # Проверяем, находится ли пользователь в состоянии тестирования
+    if await is_user_testing(state):
+        await callback.message.edit_text(
+            "Вы сейчас проходите тест. Пожалуйста, завершите текущий тест перед тем, как просматривать пройденные тесты.")
+        return
+
+    # Получение объекта пользователя
     user_result = await session.execute(
         select(User).where(User.user_id == user_id)
     )
@@ -567,6 +654,12 @@ async def back_to_tests_menu(callback: types.CallbackQuery, session: AsyncSessio
 
     user_id = callback.from_user.id
 
+    # Проверяем, находится ли пользователь в состоянии тестирования
+    if await is_user_testing(state):
+        await callback.message.edit_text(
+            "Вы сейчас проходите тест. Пожалуйста, завершите текущий тест перед тем, как просматривать пройденные тесты.")
+        return
+
     # Получение объекта пользователя
     user_result = await session.execute(select(User).where(User.user_id == user_id))
     user: Optional[User] = user_result.scalars().first()
@@ -589,9 +682,12 @@ async def back_to_tests_menu(callback: types.CallbackQuery, session: AsyncSessio
 
     # Получение уникальных тестов в порядке последней попытки
     tests_dict = {}
+    passed_tests_ids = set()
     for attempt in attempts:
         if attempt.test_id not in tests_dict:
             tests_dict[attempt.test_id] = attempt.test
+        if attempt.passed:
+            passed_tests_ids.add(attempt.test_id)
 
     tests = list(tests_dict.values())
 
@@ -601,7 +697,8 @@ async def back_to_tests_menu(callback: types.CallbackQuery, session: AsyncSessio
 
     paginated_tests = tests[:ITEMS_PER_PAGE]
 
-    keyboard = create_tests_keyboard(paginated_tests, current_page, total_pages)
+    keyboard = create_tests_keyboard(
+        paginated_tests, current_page, total_pages, passed_tests_ids)
 
     await callback.message.edit_text("Выберите тест для просмотра попыток:", reply_markup=keyboard)
     await state.set_state(TestStates.VIEWING_TESTS)
@@ -612,6 +709,12 @@ async def back_to_main_menu(callback: types.CallbackQuery, session: AsyncSession
     await callback.answer()
 
     user_id = callback.from_user.id
+
+    # Проверяем, находится ли пользователь в состоянии тестирования
+    if await is_user_testing(state):
+        await callback.message.edit_text(
+            "Вы сейчас проходите тест. Пожалуйста, завершите текущий тест перед тем, как просматривать пройденные тесты.")
+        return
 
     # Получение объекта пользователя
     user_result = await session.execute(
@@ -625,10 +728,12 @@ async def back_to_main_menu(callback: types.CallbackQuery, session: AsyncSession
 
     # Отправка главного меню как нового сообщения с ReplyKeyboardMarkup
     main_menu = get_main_menu(user.username)
-    await callback.message.delete()  # Удаляем предыдущее сообщение
+    try:
+        await callback.message.delete()  # Удаляем предыдущее сообщение
+    except TelegramBadRequest:
+        logger.warning("Предыдущее сообщение не удалось удалить.")
     await callback.message.answer(
         f"Добро пожаловать обратно, {user.firstname}!",
         reply_markup=main_menu
     )
     await state.clear()
-
