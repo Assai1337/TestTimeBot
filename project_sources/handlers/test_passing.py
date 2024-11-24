@@ -11,7 +11,7 @@ from aiogram.filters import StateFilter  # Добавляем импорт State
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.future import select
 from sqlalchemy.orm import sessionmaker, selectinload
-
+from .main_menu import get_main_menu
 from tools.models import Test, Question, TestAttempt, User
 import logging
 from aiogram.exceptions import TelegramBadRequest
@@ -95,6 +95,15 @@ async def monitor_test_time(user_id: int, test_attempt_id: int, end_time: dateti
             test_attempt.end_time = current_time()  # Обновляем фактическое время завершения
             test_attempt.answers = detailed_answers  # Обновляем ответы с информацией о правильности
 
+            # Получение User
+            user_result = await session.execute(
+                select(User).where(User.user_id == user_id)
+            )
+            user: Optional[User] = user_result.scalars().first()
+            if not user:
+                logger.error(f"Пользователь с ID {user_id} не найден при мониторинге времени.")
+                return
+
             try:
                 await session.commit()
                 await bot.send_message(
@@ -110,12 +119,23 @@ async def monitor_test_time(user_id: int, test_attempt_id: int, end_time: dateti
                 # Очистка состояния
                 await state.clear()
                 logger.debug(f"State cleared for user {user_id} after auto-finishing test.")
+
+                # Получение и отправка главного меню
+                main_menu = get_main_menu(user.username)
+                await bot.send_message(
+                    chat_id=user_id,
+                    text="Вы можете выбрать следующий тест или воспользоваться другими опциями.",
+                    reply_markup=main_menu,
+                    parse_mode='Markdown'
+                )
+                logger.debug(f"Main menu sent to user {user_id} after auto-finishing test.")
             except Exception as e:
                 await session.rollback()
                 logger.error(
                     f"Ошибка при автоматическом завершении теста: {e}")
                 await notify_admin(
-                    bot, f"Ошибка при автоматическом завершении теста: {e}")
+                    bot, f"Ошибка при автоматическом завершении теста: {e}"
+                )
 
     await engine.dispose()
 
@@ -480,8 +500,14 @@ async def confirm_finish_yes(callback: types.CallbackQuery, state: FSMContext, s
     except TelegramBadRequest as e:
         logger.error(
             f"Ошибка при редактировании кнопок после завершения теста: {e}")
-    except Exception as e:
-        logger.error(f"Неизвестная ошибка при редактировании кнопок: {e}")
+
+    # Получение и отправка главного меню
+    main_menu = get_main_menu(user.username)
+    await callback.message.answer(
+        "Вы можете выбрать следующий тест или воспользоваться другими опциями.",
+        reply_markup=main_menu
+    )
+    logger.debug(f"Main menu sent to user {user_id} after manually finishing test.")
 
 
 @router.callback_query(lambda c: c.data == "confirm_finish_no")
