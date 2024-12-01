@@ -567,7 +567,6 @@ async def send_question(message: types.Message, state: FSMContext):
     current_question: Question = questions[current_index]
     answers: Dict[str, Any] = user_data.get("answers", {})
 
-    # Получаем оставшееся время
     end_time = user_data.get("end_time")
     if end_time:
         time_left = end_time - current_time()
@@ -589,13 +588,12 @@ async def send_question(message: types.Message, state: FSMContext):
         current_answer = answers.get(str(current_question.id), "")
         question_text += f"Текущий ответ: {current_answer if current_answer else 'Нет ответа'}\n\n"
     else:
-        # Здесь изменяем текст инструкции в зависимости от типа вопроса
         if current_question.question_type == "single_choice":
             question_text += "Выберите один вариант ответа:\n\n"
         elif current_question.question_type == "multiple_choice":
             question_text += "Выберите один или несколько вариантов ответа:\n\n"
         else:
-            question_text += "Выберите вариант ответа:\n\n"
+            question_text += "Введите ответ:\n\n"
 
         for idx, option in enumerate(current_question.options, start=1):
             if current_question.question_type in ["single_choice", "multiple_choice"]:
