@@ -3,90 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <title>Добавить вопрос</title>
+    <!-- Подключаем общие стили и стили для этой страницы -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/create_questions.css') }}">
 </head>
 <body>
-    <h2>Добавить вопрос к тесту</h2>
-    <form action="{{ url_for('create_questions', test_id=test_id, num_questions=num_questions) }}" method="post">
-        <label>Текст вопроса: <input type="text" name="question_text" required></label><br>
-        <label>Тип вопроса:
-            <select name="question_type" id="question_type" onchange="updateOptionBehavior()">
-                <option value="single_choice">Одиночный выбор</option>
-                <option value="multiple_choice">Множественный выбор</option>
-                <option value="text_input">Текстовый ответ</option>
-            </select>
-        </label><br>
+    <div class="container">
+        <h2>Добавить вопрос к тесту</h2>
+        <form action="{{ url_for('create_questions', test_id=test_id, num_questions=num_questions) }}" method="post" class="create-questions-form">
+            <label>Текст вопроса:
+                <textarea name="question_text" required></textarea>
+            </label>
 
-        <!-- Поле для ввода текстового ответа -->
-        <div id="text_answer_container" style="display: none;">
-            <label>Ответ: <input type="text" name="text_answer"></label>
-        </div>
+            <label>Тип вопроса:
+                <select name="question_type" id="question_type" onchange="updateOptionBehavior()">
+                    <option value="single_choice">Одиночный выбор</option>
+                    <option value="multiple_choice">Множественный выбор</option>
+                    <option value="text_input">Текстовый ответ</option>
+                </select>
+            </label>
 
-        <!-- Блок для вариантов ответов -->
-        <div id="options_container">
-            <label>Варианты ответов (для вопросов с выбором):</label>
-            <div class="option">
-                <input type="text" name="options">
-                <label>Правильный: <input type="checkbox" name="correct_options" class="correct-checkbox" value="1"></label>
+            <!-- Поле для ввода текстового ответа -->
+            <div id="text_answer_container" style="display: none;">
+                <label>Ответ:
+                    <input type="text" name="text_answer">
+                </label>
             </div>
-        </div>
-        <button type="button" onclick="addOption()">Добавить вариант ответа</button><br>
-        <button type="submit">Сохранить вопрос</button>
-    </form>
 
-    <script>
-    // Функция для добавления нового варианта ответа
-    function addOption() {
-        var container = document.getElementById('options_container');
-        var currentOptionCount = container.querySelectorAll('.option').length + 1;
-        var newOption = document.createElement('div');
-        newOption.classList.add('option');
-        newOption.innerHTML = '<input type="text" name="options"> <label>Правильный: <input type="checkbox" name="correct_options" class="correct-checkbox" value="' + currentOptionCount + '"></label>';
-        container.appendChild(newOption);
-        updateOptionBehavior();
-    }
+            <!-- Блок для вариантов ответов -->
+            <div id="options_container">
+                <label>Варианты ответов (для вопросов с выбором):</label>
+                <div class="option">
+                    <input type="text" name="options">
+                    <label>Правильный:
+                        <input type="checkbox" name="correct_options" class="correct-checkbox" value="1">
+                    </label>
+                </div>
+            </div>
 
-    // Функция для изменения поведения в зависимости от типа вопроса
-    function updateOptionBehavior() {
-        var questionType = document.getElementById('question_type').value;
-        var checkboxes = document.querySelectorAll('.correct-checkbox');
-        var optionsContainer = document.getElementById('options_container');
-        var textAnswerContainer = document.getElementById('text_answer_container');
+            <!-- Кнопка "Добавить вариант ответа" с добавленным id -->
+            <button type="button" id="add_option_button" onclick="addOption()">Добавить вариант ответа</button>
+            <button type="submit">Сохранить вопрос</button>
+        </form>
+    </div>
 
-        // Если тип вопроса текстовый, скрываем блок с вариантами
-        if (questionType === "text_input") {
-            optionsContainer.style.display = 'none';
-            textAnswerContainer.style.display = 'block';
-        } else {
-            optionsContainer.style.display = 'block';
-            textAnswerContainer.style.display = 'none';
-
-            // Обработка поведения для одиночного и множественного выбора
-            if (questionType === "single_choice") {
-                // Убираем все галочки, если переключаемся на одиночный выбор
-                checkboxes.forEach(function(checkbox) {
-                    checkbox.checked = false;
-                    checkbox.onclick = function() {
-                        // Разрешаем выбрать только одну галочку
-                        if (this.checked) {
-                            checkboxes.forEach(function(box) {
-                                if (box !== checkbox) box.checked = false;
-                            });
-                        }
-                    };
-                });
-            } else if (questionType === "multiple_choice") {
-                // Для множественного выбора не запрещаем выбрать несколько вариантов
-                checkboxes.forEach(function(checkbox) {
-                    checkbox.onclick = null;
-                });
-            }
-        }
-    }
-
-    // Инициализация на загрузку страницы
-    document.addEventListener("DOMContentLoaded", function() {
-        updateOptionBehavior();
-    });
-    </script>
+    <!-- Подключаем внешний JS-файл -->
+    <script src="{{ url_for('static', filename='js/create_questions_script.js') }}"></script>
 </body>
 </html>

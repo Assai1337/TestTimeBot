@@ -127,6 +127,106 @@ def create_questions(test_id, num_questions):
     # GET-запрос для отображения формы создания вопроса
     return render_template('create_questions.html', test_id=test_id, num_questions=num_questions)
 
+@app.route('/edit_test/<int:test_id>', methods=['GET', 'POST'])
+def edit_test(test_id):
+    with DbSession() as db_session:
+        test = db_session.query(Test).filter_by(id=test_id).first()
+        if not test:
+            flash('Тест не найден.')
+            return redirect(url_for('admin_panel'))
+
+        if request.method == 'POST':
+            # Обновляем данные теста
+            test.test_name = request.form['test_name']
+            test.description = request.form.get('description')
+            test.question_count = int(request.form['question_count'])
+            expiry_date = request.form.get('expiry_date')
+            test.expiry_date = datetime.datetime.strptime(expiry_date, "%Y-%m-%dT%H:%M") if expiry_date else None
+            test.scores_need_to_pass = int(request.form['scores_need_to_pass'])
+            test.duration = int(request.form['duration'])
+            test.number_of_attempts = int(request.form['number_of_attempts'])
+            groups = request.form.getlist('groups')
+            test.groups_with_access = ", ".join(groups) if groups else None
+
+            # Сохраняем изменения
+            db_session.commit()
+            flash('Тест успешно обновлён.')
+            return redirect(url_for('admin_panel'))
+
+        # Получаем список групп для отображения в форме
+        groups = db_session.query(Group).all()
+        selected_groups = test.groups_with_access.split(", ") if test.groups_with_access else []
+
+    return render_template('edit_test.html', test=test, groups=groups, selected_groups=selected_groups)
+
+
+# Отображение списка вопросов для редактирования
+@app.route('/edit_questions/<int:test_id>', methods=['GET'])
+def edit_questions(test_id):
+    with DbSession() as db_session:
+        test = db_session.query(Test).filter_by(id=test_id).first()
+        if not test:
+            flash('Тест не найден.')
+            return redirect(url_for('admin_panel'))
+
+        questions = db_session.query(Question).filter_by(test_id=test_id).all()
+
+    return render_template('edit_questions.html', test=test, questions=questions)
+
+
+@app.route('/edit_question/<int:question_id>', methods=['GET', 'POST'])
+def edit_question(question_id):
+    with DbSession() as db_session:
+        question = db_session.query(Question).filter_by(id=question_id).first()
+        if not question:
+            flash('Вопрос не найден.')
+            return redirect(url_for('admin_panel'))
+
+        if request.method == 'POST':
+            # Получаем данные из формы
+            question_text = request.form.get('question_text')
+            question_type = request.form.get('question_type')
+
+            if not question_text:
+                flash('Текст вопроса обязателен для заполнения.')
+                return redirect(url_for('edit_question', question_id=question_id))
+
+            question.question_text = question_text
+            question.question_type = question_type
+
+            # Обработка вариантов ответов
+            if question_type in ['single_choice', 'multiple_choice']:
+                options_texts = request.form.getlist('options')
+                correct_options = request.form.getlist('correct_options')
+
+                options = []
+                for idx, option_text in enumerate(options_texts, start=1):
+                    option = {
+                        'id': idx,
+                        'text': option_text.strip(),
+                        'is_correct': str(idx) in correct_options
+                    }
+                    options.append(option)
+
+                question.options = options
+                # Формируем правильный ответ для хранения
+                right_answer = ''.join([str(opt['id']) for opt in options if opt['is_correct']])
+                question.right_answer = right_answer
+            elif question_type == 'text_input':
+                text_answer = request.form.get('text_answer')
+                question.right_answer = text_answer.lower()
+                question.options = None
+            else:
+                flash('Неизвестный тип вопроса.')
+                return redirect(url_for('edit_question', question_id=question_id))
+
+            # Сохраняем изменения
+            db_session.commit()
+            flash('Вопрос успешно обновлён.')
+            return redirect(url_for('edit_questions', test_id=question.test_id))
+
+    return render_template('edit_question.html', question=question)
+
 
 # Сохранение теста и всех вопросов в базу данных после завершения
 @app.route('/save_test')

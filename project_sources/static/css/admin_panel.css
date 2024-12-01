@@ -1,0 +1,55 @@
+/* static/css/admin_panel.css */
+
+/* Стили для панели администратора */
+
+.admin-panel {
+    background-color: #ffffff;
+    padding: 30px 40px;
+    border-radius: 8px;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+}
+
+.admin-panel h1 {
+    margin-bottom: 40px;
+}
+
+.admin-panel .btn-create {
+    display: inline-block;
+    background-color: #17a2b8;
+    color: #ffffff;
+    padding: 12px 25px;
+    border-radius: 4px;
+    text-decoration: none;
+    margin-bottom: 30px;
+    transition: background-color 0.3s;
+}
+
+.admin-panel .btn-create:hover {
+    background-color: #138496;
+}
+
+.admin-panel table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.admin-panel table th,
+.admin-panel table td {
+    border: 1px solid #dee2e6;
+    padding: 15px;
+    text-align: left;
+    font-size: 15px;
+}
+
+.admin-panel table th {
+    background-color: #e9ecef;
+    font-weight: 600;
+}
+
+.admin-panel table tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+
+.admin-panel table tr:hover {
+    background-color: #e2e6ea;
+}

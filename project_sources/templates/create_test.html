@@ -3,87 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <title>Создать новый тест</title>
-    <script>
-    // Функция для валидации формы перед отправкой
-    function validateForm(event) {
-        const description = document.querySelector('textarea[name="description"]').value.trim();
-        const groupCheckboxes = document.querySelectorAll('input[name="groups"]:checked');
-        const questionCount = document.querySelector('input[name="question_count"]').value;
-        const scoresToPass = document.querySelector('input[name="scores_need_to_pass"]').value;
-        const expiryDate = document.querySelector('input[name="expiry_date"]').value;
-        const number_of_attempts = document.querySelector('input[name="number_of_attempts"]').value;
-
-        // Проверка описания
-        if (!description) {
-            alert('Описание теста обязательно для заполнения.');
-            event.preventDefault();
-            return false;
-        }
-
-        // Проверка групп
-        if (groupCheckboxes.length === 0) {
-            alert('Выберите хотя бы одну группу, которой будет доступен тест.');
-            event.preventDefault();
-            return false;
-        }
-
-        // Проверка баллов для прохождения
-        if (parseInt(scoresToPass) > parseInt(questionCount)) {
-            alert('Баллы для прохождения не могут превышать количество вопросов.');
-            event.preventDefault();
-            return false;
-        }
-
-        // Проверка даты окончания
-        if (expiryDate) {
-            const now = new Date();
-            const expiry = new Date(expiryDate);
-            const diffMinutes = (expiry - now) / 60000; // Разница в минутах
-
-            if (diffMinutes < 1) {
-                alert('Дата окончания теста должна быть минимум через 1 минут от текущего времени.');
-                event.preventDefault();
-                return false;
-            }
-        } else {
-            alert('Укажите дату окончания теста.');
-            event.preventDefault();
-            return false;
-        }
-
-        return true;
-    }
-    </script>
+    <!-- Подключаем общие стили и стили для этой страницы -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/create_test.css') }}">
 </head>
 <body>
-    <h2>Создать новый тест</h2>
+    <div class="container">
+        <h2>Создать новый тест</h2>
 
-    {% with messages = get_flashed_messages() %}
-        {% if messages %}
-            <ul>
-                {% for message in messages %}
-                    <li style="color: #000000;">{{ message }}</li>
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <ul class="error-messages">
+                    {% for message in messages %}
+                        <li>{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+
+        <form action="{{ url_for('create_test') }}" method="post" onsubmit="validateForm(event)" class="create-test-form">
+            <label>Название теста:
+                <input type="text" name="test_name" required>
+            </label>
+
+            <label>Описание:
+                <textarea name="description" required></textarea>
+            </label>
+
+            <label>Количество вопросов:
+                <input type="number" name="question_count" min="1" required>
+            </label>
+
+            <label>Дата окончания:
+                <input type="datetime-local" name="expiry_date" required>
+            </label>
+
+            <label>Баллы для прохождения:
+                <input type="number" name="scores_need_to_pass" min="1" required>
+            </label>
+
+            <label>Длительность теста (в минутах):
+                <input type="number" name="duration" min="1" required>
+            </label>
+
+            <label>Максимальное количество попыток:
+                <input type="number" name="number_of_attempts" min="1" required>
+            </label>
+
+            <fieldset>
+                <legend>Группы с доступом:</legend>
+                {% for group in groups %}
+                    <label>
+                        <input type="checkbox" name="groups" value="{{ group.groupname }}">
+                        {{ group.groupname }}
+                    </label>
                 {% endfor %}
-            </ul>
-        {% endif %}
-    {% endwith %}
+            </fieldset>
 
-    <form action="{{ url_for('create_test') }}" method="post" onsubmit="validateForm(event)">
-        <label>Название теста: <input type="text" name="test_name" required></label><br>
-        <label>Описание: <textarea name="description" required></textarea></label><br>
-        <label>Количество вопросов: <input type="number" name="question_count" min="1" required></label><br>
-        <label>Дата окончания: <input type="datetime-local" name="expiry_date" required></label><br>
-        <label>Баллы для прохождения: <input type="number" name="scores_need_to_pass" min="1" required></label><br>
-        <label>Длительность теста (в минутах): <input type="number" name="duration" min="1" required></label><br>
-        <label>Максимальное количество попыток: <input type="number" name="number_of_attempts" min="1" required></label><br>
-        <label>Группы с доступом:</label><br>
-        {% for group in groups %}
-            <label>
-                <input type="checkbox" name="groups" value="{{ group.groupname }}">
-                {{ group.groupname }}
-            </label><br>
-        {% endfor %}
-        <button type="submit">Создать тест</button>
-    </form>
+            <button type="submit">Создать тест</button>
+        </form>
+    </div>
+
+    <!-- Подключаем внешний JS-файл -->
+    <script src="{{ url_for('static', filename='js/create_test_script.js') }}"></script>
 </body>
 </html>

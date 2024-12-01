@@ -1,0 +1,65 @@
+/* static/css/create_questions.css */
+
+/* Стили для страницы создания вопросов */
+
+.create-questions-form {
+    background-color: #ffffff;
+    padding: 40px;
+    border-radius: 8px;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+}
+
+.create-questions-form label {
+    display: block;
+    margin-bottom: 20px;
+    font-weight: 500;
+    color: #555;
+}
+
+.create-questions-form textarea,
+.create-questions-form input[type="text"],
+.create-questions-form select {
+    width: 100%;
+    padding: 12px 15px;
+    margin-top: 8px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 15px;
+}
+
+.option {
+    margin-bottom: 15px;
+}
+
+.option input[type="text"] {
+    width: calc(100% - 160px);
+    padding: 10px;
+}
+
+.option label {
+    display: inline-block;
+    margin-left: 10px;
+    font-weight: normal;
+    color: #333;
+}
+
+.create-questions-form button[type="button"],
+.create-questions-form button[type="submit"] {
+    background-color: #007bff;
+    color: #ffffff;
+    padding: 12px 25px;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    margin-top: 15px;
+    transition: background-color 0.3s;
+}
+
+.create-questions-form button[type="button"]:hover,
+.create-questions-form button[type="submit"]:hover {
+    background-color: #0056b3;
+}
+
+#text_answer_container {
+    margin-bottom: 20px;
+}

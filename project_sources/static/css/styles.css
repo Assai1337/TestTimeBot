@@ -1,0 +1,48 @@
+/* static/css/styles.css */
+
+/* Общие стили для всего сайта */
+
+body {
+    font-family: 'Roboto', sans-serif;
+    background-color: #f0f2f5;
+    margin: 0;
+    padding: 0;
+    color: #333;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+h1, h2, h3 {
+    color: #444;
+    margin-bottom: 20px;
+}
+
+a {
+    text-decoration: none;
+    color: #007bff;
+}
+
+a:hover {
+    color: #0056b3;
+}
+
+button {
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.error-messages {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 20px;
+}
+
+.error-messages li {
+    list-style-type: none;
+}
