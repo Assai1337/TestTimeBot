@@ -37,11 +37,14 @@
                     <td>{{ test.description or "Нет описания" }}</td>
                     <td>{{ test.groups_with_access or "Все группы" }}</td>
 
+                    <!-- Исправлено: используем test.creation_date для "Дата создания" -->
+                    <td data-value="{{ test.creation_date.strftime('%Y-%m-%dT%H:%M:%S') }}">
+                        {{ test.creation_date.strftime('%Y-%m-%d %H:%M:%S') }}
+                    </td>
+
                     <td data-value="{{ test.expiry_date.strftime('%Y-%m-%dT%H:%M:%S+03:00') if test.expiry_date else '' }}">
-                        {{ test.expiry_date.strftime('%Y-%m-%d %H:%M:%S') if test.expiry_date else "Без окончания" }}</td>
-
-
-                    <td data-value="{{ test.expiry_date.strftime('%Y-%m-%dT%H:%M:%S') if test.expiry_date else '' }}">{{ test.expiry_date.strftime('%Y-%m-%d %H:%M:%S') if test.expiry_date else "Без окончания" }}</td>
+                        {{ test.expiry_date.strftime('%Y-%m-%d %H:%M:%S') if test.expiry_date else "Без окончания" }}
+                    </td>
                     <td>{{ test.question_count }}</td>
                     <td>{{ test.scores_need_to_pass }}</td>
                     <td>{{ test.duration }}</td>

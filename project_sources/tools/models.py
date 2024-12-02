@@ -2,12 +2,8 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Bool
 from sqlalchemy.orm import relationship, declarative_base
 from datetime import datetime, timedelta
 from sqlalchemy.dialects.postgresql import JSON
-
+from zoneinfo import ZoneInfo
 Base = declarative_base()
-
-# Функция для получения текущего времени с учетом UTC+3
-def current_time_plus_3():
-    return datetime.utcnow() + timedelta(hours=3)
 
 # Модель для пользователей
 class User(Base):
@@ -19,7 +15,7 @@ class User(Base):
     lastname = Column(String, nullable=False)
     middlename = Column(String)
     group = Column(String)
-    registration_date = Column(DateTime, default=current_time_plus_3)  # Используем функцию для установки времени
+    registration_date = Column(DateTime, default=datetime.utcnow() + timedelta(hours=3))  # Используем функцию для установки времени
     attempts = relationship('TestAttempt', back_populates='user', cascade="all, delete-orphan")
 
 # Модель для тестов
@@ -29,7 +25,7 @@ class Test(Base):
     test_name = Column(String, nullable=False)
     description = Column(Text)
     groups_with_access = Column(String)
-    creation_date = Column(DateTime, default=current_time_plus_3)  # Используем функцию для установки времени
+    creation_date = Column(DateTime, default=datetime.now(ZoneInfo("Europe/Moscow")).replace(tzinfo=None))
     expiry_date = Column(DateTime)  # Дата окончания будет устанавливаться вручную
     question_count = Column(Integer, nullable=False)
     scores_need_to_pass = Column(Integer, nullable=False)
@@ -64,7 +60,7 @@ class TestAttempt(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     test_id = Column(Integer, ForeignKey('tests.id', ondelete="CASCADE"), nullable=False)  # Внешний ключ
     user_id = Column(BigInteger, ForeignKey('user.id', ondelete="CASCADE"), nullable=False)  # Внешний ключ
-    start_time = Column(DateTime, nullable=False, default=current_time_plus_3)  # Используем функцию для установки времени
+    start_time = Column(DateTime, nullable=False, default=datetime.now(ZoneInfo("Europe/Moscow")).replace(tzinfo=None))  # Используем функцию для установки времени
     end_time = Column(DateTime, nullable=False)
     score = Column(Integer, nullable=False)
     passed = Column(Boolean, nullable=False)

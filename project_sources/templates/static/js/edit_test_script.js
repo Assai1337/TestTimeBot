@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (expiryDateValue) {
             const expiryDate = new Date(expiryDateValue);
             // Проверяем, что дата окончания как минимум на 30 минут больше текущего времени
-            if (expiryDate - currentTime < 30 * 60 * 1000) {
+            if (expiryDate - currentTime < 1 * 60 * 1000) {
                 alert('Дата окончания должна быть больше текущего времени на 30 минут.');
                 event.preventDefault();
             }
