@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Результаты теста "{{ test.test_name }}"</title>
+    <!-- Подключаем общие стили -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <!-- Можно добавить отдельный CSS-файл для этой страницы -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/view_results.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>Результаты теста "{{ test.test_name }}"</h2>
+
+        <!-- Форма для фильтрации -->
+        <form method="get" class="filter-form">
+            <label>
+                ID пользователя:
+                <input type="text" name="user_id" value="{{ request.args.get('user_id', '') }}">
+            </label>
+
+            <label>
+                Статус прохождения:
+                <select name="passed">
+                    <option value="">Все</option>
+                    <option value="true" {% if request.args.get('passed') == 'true' %}selected{% endif %}>Сдал</option>
+                    <option value="false" {% if request.args.get('passed') == 'false' %}selected{% endif %}>Не сдал</option>
+                </select>
+            </label>
+
+            <button type="submit">Применить фильтры</button>
+        </form>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>ID пользователя</th>
+                    <th>Имя пользователя</th>
+                    <th>Дата начала</th>
+                    <th>Дата окончания</th>
+                    <th>Оценка</th>
+                    <th>Статус</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for attempt in attempts %}
+                <tr>
+                    <td>{{ attempt.user.user_id }}</td>
+                    <td>{{ attempt.user.username }}</td>
+                    <td>{{ attempt.start_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td>{{ attempt.end_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td>{{ attempt.score }}</td>
+                    <td>{{ "Сдал" if attempt.passed else "Не сдал" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <a href="{{ url_for('admin_panel') }}" class="btn-back">Вернуться в панель администратора</a>
+    </div>
+</body>
+</html>

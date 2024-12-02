@@ -63,3 +63,15 @@
 #text_answer_container {
     margin-bottom: 20px;
 }
+
+.error-messages {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 20px;
+}
+
+.error-messages li {
+    list-style-type: none;
+}

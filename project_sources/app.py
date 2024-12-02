@@ -6,7 +6,10 @@ from tools.models import Base, User, Test, Question, TestAttempt, Group
 import tools.config as config
 import datetime
 
-app = Flask(__name__)
+app = Flask(__name__,
+            static_folder='templates/static',
+            template_folder='templates')
+
 app.secret_key = 'supersecretkey'
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_PERMANENT'] = False
@@ -77,11 +80,11 @@ def create_test():
 def create_questions(test_id, num_questions):
     if request.method == 'POST':
         # Получаем данные вопроса из формы
-        question_text = request.form.get('question_text')
+        question_text = request.form.get('question_text').strip()
         question_type = request.form.get('question_type')
 
         if not question_text:
-            flash('Текст вопроса обязателен для заполнения')
+            flash('Текст вопроса обязателен для заполнения.')
             return redirect(url_for('create_questions', test_id=test_id, num_questions=num_questions))
 
         question_data = {
@@ -91,28 +94,55 @@ def create_questions(test_id, num_questions):
             'right_answer': ''
         }
 
+        # Список для хранения сообщений об ошибках
+        errors = []
+
         # Для вопросов с вариантами ответа
         if question_type in ['single_choice', 'multiple_choice']:
             options = request.form.getlist('options')  # Список вариантов
             correct_options = request.form.getlist('correct_options')  # Правильные варианты
 
-            for idx, option_text in enumerate(options, start=1):
-                # Формируем структуру варианта ответа с уникальным id
-                option = {
-                    "id": idx,  # Уникальный номер варианта
-                    "text": option_text.strip(),  # Текст варианта
-                    "is_correct": str(idx) in correct_options  # Правильный ли вариант
-                }
-                question_data['options'].append(option)
+            # Проверка наличия минимум двух вариантов ответа
+            if len(options) < 2:
+                errors.append('Должно быть минимум два варианта ответа.')
 
-                # Формируем правильный ответ для хранения
-                if str(idx) in correct_options:
-                    question_data['right_answer'] += str(idx)
+            # Проверка, что варианты ответов не пустые
+            for idx, option_text in enumerate(options, start=1):
+                option_text = option_text.strip()
+                if not option_text:
+                    errors.append(f'Вариант ответа #{idx} не может быть пустым.')
+                else:
+                    # Формируем структуру варианта ответа с уникальным id
+                    option = {
+                        "id": idx,  # Уникальный номер варианта
+                        "text": option_text,  # Текст варианта
+                        "is_correct": str(idx) in correct_options  # Правильный ли вариант
+                    }
+                    question_data['options'].append(option)
+                    # Формируем правильный ответ для хранения
+                    if str(idx) in correct_options:
+                        question_data['right_answer'] += str(idx)
+
+            # Проверка наличия хотя бы одного правильного варианта
+            if not correct_options:
+                errors.append('Необходимо выбрать хотя бы один правильный вариант ответа.')
 
         # Для текстовых вопросов
         elif question_type == 'text_input':
-            text_answer = request.form.get('text_answer')
-            question_data['right_answer'] = text_answer.lower()
+            text_answer = request.form.get('text_answer', '').strip()
+            if not text_answer:
+                errors.append('Ответ не может быть пустым для текстового вопроса.')
+            else:
+                question_data['right_answer'] = text_answer.lower()
+
+        else:
+            errors.append('Некорректный тип вопроса.')
+
+        # Если есть ошибки, отображаем их и возвращаемся к форме
+        if errors:
+            for error in errors:
+                flash(error)
+            return redirect(url_for('create_questions', test_id=test_id, num_questions=num_questions))
 
         # Сохраняем данные вопроса в сессии Flask
         flask_session['questions_data'].append(question_data)
@@ -226,6 +256,33 @@ def edit_question(question_id):
             return redirect(url_for('edit_questions', test_id=question.test_id))
 
     return render_template('edit_question.html', question=question)
+
+@app.route('/view_results/<int:test_id>', methods=['GET'], endpoint='view_results')
+def view_results(test_id):
+    with DbSession() as db_session:
+        test = db_session.query(Test).filter_by(id=test_id).first()
+        if not test:
+            flash('Тест не найден.')
+            return redirect(url_for('admin_panel'))
+
+        # Получаем параметры фильтра из URL
+        user_id = request.args.get('user_id')
+        passed = request.args.get('passed')
+
+        # Базовый запрос
+        query = db_session.query(TestAttempt).filter_by(test_id=test_id)
+
+        # Применяем фильтры
+        if user_id:
+            query = query.filter(TestAttempt.user_id == user_id)
+        if passed == 'true':
+            query = query.filter(TestAttempt.passed == True)
+        elif passed == 'false':
+            query = query.filter(TestAttempt.passed == False)
+
+        attempts = query.all()
+
+    return render_template('view_results.html', test=test, attempts=attempts)
 
 
 # Сохранение теста и всех вопросов в базу данных после завершения

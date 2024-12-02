@@ -2,17 +2,14 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Создать новый тест</title>
-    <!-- Подключение стилей -->
+    <title>Редактировать тест</title>
+    <!-- Подключаем общие стили и стили для страницы создания теста -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/create_test.css') }}">
-    <!-- Подключение скриптов -->
-    <script src="{{ url_for('static', filename='js/create_test_script.js') }}"></script>
-
 </head>
 <body>
     <div class="container">
-        <h2>Создать новый тест</h2>
+        <h2>Редактировать тест</h2>
 
         {% with messages = get_flashed_messages() %}
             {% if messages %}
@@ -24,50 +21,50 @@
             {% endif %}
         {% endwith %}
 
-        <form action="{{ url_for('create_test') }}" method="post" onsubmit="validateForm(event)" class="create-test-form">
+        <form action="{{ url_for('edit_test', test_id=test.id) }}" method="post" class="create-test-form">
             <label>Название теста:
-                <input type="text" name="test_name" required>
+                <input type="text" name="test_name" value="{{ test.test_name }}" required>
             </label>
 
             <label>Описание:
-                <textarea name="description" required></textarea>
+                <textarea name="description" required>{{ test.description }}</textarea>
             </label>
 
             <label>Количество вопросов:
-                <input type="number" name="question_count" min="1" required>
+                <input type="number" name="question_count" min="1" value="{{ test.question_count }}" required readonly>
             </label>
 
+
             <label>Дата окончания:
-                <input type="datetime-local" name="expiry_date" required>
+                <input type="datetime-local" name="expiry_date" value="{{ test.expiry_date.strftime('%Y-%m-%dT%H:%M') if test.expiry_date else '' }}">
             </label>
 
             <label>Баллы для прохождения:
-                <input type="number" name="scores_need_to_pass" min="1" required>
+                <input type="number" name="scores_need_to_pass" min="1" value="{{ test.scores_need_to_pass }}" required>
             </label>
 
             <label>Длительность теста (в минутах):
-                <input type="number" name="duration" min="1" required>
+                <input type="number" name="duration" min="1" value="{{ test.duration }}" required>
             </label>
 
             <label>Максимальное количество попыток:
-                <input type="number" name="number_of_attempts" min="1" required>
+                <input type="number" name="number_of_attempts" min="1" value="{{ test.number_of_attempts }}" required>
             </label>
 
             <fieldset>
                 <legend>Группы с доступом:</legend>
                 {% for group in groups %}
                     <label>
-                        <input type="checkbox" name="groups" value="{{ group.groupname }}">
+                        <input type="checkbox" name="groups" value="{{ group.groupname }}" {% if group.groupname in selected_groups %}checked{% endif %}>
                         {{ group.groupname }}
                     </label>
                 {% endfor %}
             </fieldset>
 
-            <button type="submit">Создать тест</button>
+            <button type="submit">Сохранить изменения</button>
         </form>
     </div>
-
-    <!-- Подключаем внешний JS-файл -->
-    <script src="{{ url_for('static', filename='js/create_test_script.js') }}"></script>
+<script src="{{ url_for('static', filename='js/edit_test_script.js') }}"></script>
 </body>
 </html>
+

@@ -1,3 +1,5 @@
+<!-- admin_panel.html -->
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -13,18 +15,19 @@
         <a href="{{ url_for('create_test') }}" class="btn-create">Создать новый тест</a>
 
         <h2>Существующие тесты</h2>
-        <table>
+        <table id="testsTable">
             <thead>
                 <tr>
-                    <th>Название теста</th>
-                    <th>Описание</th>
-                    <th>Группы с доступом</th>
-                    <th>Дата создания</th>
-                    <th>Дата окончания</th>
-                    <th>Количество вопросов</th>
-                    <th>Баллы для прохождения</th>
-                    <th>Длительность (минуты)</th>
-                    <th>Количество попыток</th>
+                    <th data-column="test_name">Название теста<span class="sort-indicator"></span></th>
+                    <th data-column="description">Описание<span class="sort-indicator"></span></th>
+                    <th data-column="groups_with_access">Группы с доступом<span class="sort-indicator"></span></th>
+                    <th data-column="creation_date">Дата создания<span class="sort-indicator"></span></th>
+                    <th data-column="expiry_date">Дата окончания<span class="sort-indicator"></span></th>
+                    <th data-column="question_count">Количество вопросов<span class="sort-indicator"></span></th>
+                    <th data-column="scores_need_to_pass">Баллы для прохождения<span class="sort-indicator"></span></th>
+                    <th data-column="duration">Длительность (минуты)<span class="sort-indicator"></span></th>
+                    <th data-column="number_of_attempts">Количество попыток<span class="sort-indicator"></span></th>
+                    <th>Действия</th>
                 </tr>
             </thead>
             <tbody>
@@ -33,21 +36,28 @@
                     <td>{{ test.test_name }}</td>
                     <td>{{ test.description or "Нет описания" }}</td>
                     <td>{{ test.groups_with_access or "Все группы" }}</td>
-                    <td>{{ test.creation_date.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                    <td>{{ test.expiry_date.strftime('%Y-%m-%d %H:%M:%S') if test.expiry_date else "Без окончания" }}</td>
+
+                    <td data-value="{{ test.expiry_date.strftime('%Y-%m-%dT%H:%M:%S+03:00') if test.expiry_date else '' }}">
+                        {{ test.expiry_date.strftime('%Y-%m-%d %H:%M:%S') if test.expiry_date else "Без окончания" }}</td>
+
+
+                    <td data-value="{{ test.expiry_date.strftime('%Y-%m-%dT%H:%M:%S') if test.expiry_date else '' }}">{{ test.expiry_date.strftime('%Y-%m-%d %H:%M:%S') if test.expiry_date else "Без окончания" }}</td>
                     <td>{{ test.question_count }}</td>
                     <td>{{ test.scores_need_to_pass }}</td>
                     <td>{{ test.duration }}</td>
                     <td>{{ test.number_of_attempts }}</td>
                     <td>
-                    <a href="{{ url_for('edit_test', test_id=test.id) }}" class="btn-action">Редактировать тест</a>
-                    <a href="{{ url_for('edit_questions', test_id=test.id) }}" class="btn-action">Редактировать вопросы</a>
-                    <a href="{{ url_for('view_results', test_id=test.id) }}" class="btn-action">Результаты</a>
+                        <a href="{{ url_for('edit_test', test_id=test.id) }}" class="btn-action">Редактировать тест</a>
+                        <a href="{{ url_for('edit_questions', test_id=test.id) }}" class="btn-action">Редактировать вопросы</a>
+                        <a href="{{ url_for('view_results', test_id=test.id) }}" class="btn-action">Результаты</a>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
+
+    <!-- Подключаем внешний JavaScript-файл -->
+    <script src="{{ url_for('static', filename='js/admin_script.js') }}"></script>
 </body>
 </html>

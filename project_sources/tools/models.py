@@ -1,9 +1,13 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, BigInteger
 from sqlalchemy.orm import relationship, declarative_base
-import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.dialects.postgresql import JSON
 
 Base = declarative_base()
+
+# Функция для получения текущего времени с учетом UTC+3
+def current_time_plus_3():
+    return datetime.utcnow() + timedelta(hours=3)
 
 # Модель для пользователей
 class User(Base):
@@ -15,7 +19,7 @@ class User(Base):
     lastname = Column(String, nullable=False)
     middlename = Column(String)
     group = Column(String)
-    registration_date = Column(DateTime, default=datetime.datetime.utcnow)
+    registration_date = Column(DateTime, default=current_time_plus_3)  # Используем функцию для установки времени
     attempts = relationship('TestAttempt', back_populates='user', cascade="all, delete-orphan")
 
 # Модель для тестов
@@ -25,8 +29,8 @@ class Test(Base):
     test_name = Column(String, nullable=False)
     description = Column(Text)
     groups_with_access = Column(String)
-    creation_date = Column(DateTime, default=datetime.datetime.utcnow)
-    expiry_date = Column(DateTime)
+    creation_date = Column(DateTime, default=current_time_plus_3)  # Используем функцию для установки времени
+    expiry_date = Column(DateTime)  # Дата окончания будет устанавливаться вручную
     question_count = Column(Integer, nullable=False)
     scores_need_to_pass = Column(Integer, nullable=False)
     duration = Column(Integer, nullable=False)
@@ -60,7 +64,7 @@ class TestAttempt(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     test_id = Column(Integer, ForeignKey('tests.id', ondelete="CASCADE"), nullable=False)  # Внешний ключ
     user_id = Column(BigInteger, ForeignKey('user.id', ondelete="CASCADE"), nullable=False)  # Внешний ключ
-    start_time = Column(DateTime, nullable=False)
+    start_time = Column(DateTime, nullable=False, default=current_time_plus_3)  # Используем функцию для установки времени
     end_time = Column(DateTime, nullable=False)
     score = Column(Integer, nullable=False)
     passed = Column(Boolean, nullable=False)

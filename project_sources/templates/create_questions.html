@@ -10,7 +10,18 @@
 <body>
     <div class="container">
         <h2>Добавить вопрос к тесту</h2>
-        <form action="{{ url_for('create_questions', test_id=test_id, num_questions=num_questions) }}" method="post" class="create-questions-form">
+        <!-- Блок для отображения сообщений об ошибках -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <ul class="error-messages">
+                    {% for message in messages %}
+                        <li>{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+
+        <form action="{{ url_for('create_questions', test_id=test_id, num_questions=num_questions) }}" method="post" class="create-questions-form" onsubmit="return validateForm()">
             <label>Текст вопроса:
                 <textarea name="question_text" required></textarea>
             </label>
@@ -33,12 +44,7 @@
             <!-- Блок для вариантов ответов -->
             <div id="options_container">
                 <label>Варианты ответов (для вопросов с выбором):</label>
-                <div class="option">
-                    <input type="text" name="options">
-                    <label>Правильный:
-                        <input type="checkbox" name="correct_options" class="correct-checkbox" value="1">
-                    </label>
-                </div>
+                <!-- Здесь будут динамически добавляться варианты -->
             </div>
 
             <!-- Кнопка "Добавить вариант ответа" с добавленным id -->
