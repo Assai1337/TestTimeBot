@@ -1,7 +1,8 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session as flask_session
+from flask import abort
 from flask_session import Session
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker,joinedload
 from tools.models import Base, User, Test, Question, TestAttempt, Group
 import tools.config as config
 import datetime
@@ -64,10 +65,10 @@ def create_test():
             'duration': duration,
             'number_of_attempts': number_of_attempts
         }
-        flask_session['questions_data'] = []
+        flask_session['questions_data'] = [None] * question_count  # Инициализируем список вопросов заданной длины
 
         # Переходим на страницу создания вопросов
-        return redirect(url_for('create_questions', test_id='temp', num_questions=question_count))
+        return redirect(url_for('create_questions', test_id='temp', num_questions=question_count, question_index=0))
 
     # Обработка GET-запроса для отображения формы
     with DbSession() as db_session:
@@ -76,87 +77,158 @@ def create_test():
 
 
 # Создание вопросов для теста
-@app.route('/create_questions/<string:test_id>/<int:num_questions>', methods=['GET', 'POST'])
-def create_questions(test_id, num_questions):
+@app.route('/create_questions/<string:test_id>/<int:num_questions>/<int:question_index>', methods=['GET', 'POST'])
+def create_questions(test_id, num_questions, question_index):
+    if 'test_data' not in flask_session or 'questions_data' not in flask_session:
+        flash('Сессия истекла. Пожалуйста, начните создание теста заново.')
+        return redirect(url_for('create_test'))
+
     if request.method == 'POST':
-        # Получаем данные вопроса из формы
-        question_text = request.form.get('question_text').strip()
-        question_type = request.form.get('question_type')
+        # Получаем действие из скрытого поля
+        action = request.form.get('action')
 
-        if not question_text:
-            flash('Текст вопроса обязателен для заполнения.')
-            return redirect(url_for('create_questions', test_id=test_id, num_questions=num_questions))
-
-        question_data = {
-            'question_text': question_text,
-            'question_type': question_type,
-            'options': [],
-            'right_answer': ''
-        }
-
-        # Список для хранения сообщений об ошибках
-        errors = []
-
-        # Для вопросов с вариантами ответа
-        if question_type in ['single_choice', 'multiple_choice']:
-            options = request.form.getlist('options')  # Список вариантов
-            correct_options = request.form.getlist('correct_options')  # Правильные варианты
-
-            # Проверка наличия минимум двух вариантов ответа
-            if len(options) < 2:
-                errors.append('Должно быть минимум два варианта ответа.')
-
-            # Проверка, что варианты ответов не пустые
-            for idx, option_text in enumerate(options, start=1):
-                option_text = option_text.strip()
-                if not option_text:
-                    errors.append(f'Вариант ответа #{idx} не может быть пустым.')
-                else:
-                    # Формируем структуру варианта ответа с уникальным id
-                    option = {
-                        "id": idx,  # Уникальный номер варианта
-                        "text": option_text,  # Текст варианта
-                        "is_correct": str(idx) in correct_options  # Правильный ли вариант
-                    }
-                    question_data['options'].append(option)
-                    # Формируем правильный ответ для хранения
-                    if str(idx) in correct_options:
-                        question_data['right_answer'] += str(idx)
-
-            # Проверка наличия хотя бы одного правильного варианта
-            if not correct_options:
-                errors.append('Необходимо выбрать хотя бы один правильный вариант ответа.')
-
-        # Для текстовых вопросов
-        elif question_type == 'text_input':
-            text_answer = request.form.get('text_answer', '').strip()
-            if not text_answer:
-                errors.append('Ответ не может быть пустым для текстового вопроса.')
+        if action == 'prev':
+            # Переходим к предыдущему вопросу без сохранения данных
+            if question_index > 0:
+                return redirect(url_for('create_questions', test_id=test_id, num_questions=num_questions, question_index=question_index - 1))
             else:
-                question_data['right_answer'] = text_answer.lower()
+                return redirect(url_for('create_questions', test_id=test_id, num_questions=num_questions, question_index=0))
 
-        else:
-            errors.append('Некорректный тип вопроса.')
+        elif action in ['next', 'save']:
+            # Сохраняем данные вопроса
+            question_text = request.form.get('question_text', '').strip()
+            question_type = request.form.get('question_type', '').strip()
 
-        # Если есть ошибки, отображаем их и возвращаемся к форме
-        if errors:
-            for error in errors:
-                flash(error)
-            return redirect(url_for('create_questions', test_id=test_id, num_questions=num_questions))
+            question_data = {
+                'question_text': question_text,
+                'question_type': question_type,
+                'options': [],
+                'right_answer': ''
+            }
 
-        # Сохраняем данные вопроса в сессии Flask
-        flask_session['questions_data'].append(question_data)
-        flask_session.modified = True  # Обновление сессии для сохранения изменений
+            errors = []
 
-        # Проверяем, нужно ли создавать ещё вопросы
-        if num_questions > 1:
-            return redirect(url_for('create_questions', test_id=test_id, num_questions=num_questions - 1))
-        else:
-            return redirect(url_for('save_test'))
+            # Для вопросов с вариантами ответа
+            if question_type in ['single_choice', 'multiple_choice']:
+                options = request.form.getlist('options')  # Список вариантов
+                correct_options = request.form.getlist('correct_options')  # Правильные варианты
+
+                # Проверка наличия минимум двух вариантов ответа
+                if len(options) < 2:
+                    errors.append('Должно быть минимум два варианта ответа.')
+
+                # Проверка, что варианты ответов не пустые
+                for idx, option_text in enumerate(options, start=1):
+                    option_text = option_text.strip()
+                    if not option_text:
+                        errors.append(f'Вариант ответа #{idx} не может быть пустым.')
+                    else:
+                        # Формируем структуру варианта ответа с уникальным id
+                        option = {
+                            "id": idx,  # Уникальный номер варианта
+                            "text": option_text,  # Текст варианта
+                            "is_correct": str(idx) in correct_options  # Правильный ли вариант
+                        }
+                        question_data['options'].append(option)
+                        # Формируем правильный ответ для хранения
+                        if str(idx) in correct_options:
+                            question_data['right_answer'] += str(idx)
+
+                # Проверка наличия хотя бы одного правильного варианта
+                if not correct_options:
+                    errors.append('Необходимо выбрать хотя бы один правильный вариант ответа.')
+
+            # Для текстовых вопросов
+            elif question_type == 'text_input':
+                text_answer = request.form.get('text_answer', '').strip()
+                if not text_answer:
+                    errors.append('Ответ не может быть пустым для текстового вопроса.')
+                else:
+                    question_data['right_answer'] = text_answer.lower()
+
+            else:
+                errors.append('Некорректный тип вопроса.')
+
+            # Если есть ошибки, отображаем их и остаёмся на текущем вопросе
+            if errors:
+                for error in errors:
+                    flash(error)
+                return redirect(url_for('create_questions', test_id=test_id, num_questions=num_questions, question_index=question_index))
+
+            # Сохраняем данные вопроса в сессии по индексу вопроса
+            flask_session['questions_data'][question_index] = question_data
+            flask_session.modified = True  # Обновление сессии для сохранения изменений
+
+            if action == 'save':
+                # Выполняем сохранение теста и вопросов
+                test_data = flask_session['test_data']
+                questions_data = flask_session['questions_data']
+
+                # Проверяем, что все вопросы заполнены
+                if any(q is None for q in questions_data):
+                    missing_index = flask_session['questions_data'].index(None)
+                    flash('Не все вопросы заполнены.')
+                    return redirect(url_for('create_questions', test_id=test_id, num_questions=num_questions, question_index=missing_index))
+
+                # Сохраняем тест и вопросы в базе данных в одной транзакции
+                with DbSession() as db_session:
+                    test = Test(
+                        test_name=test_data['test_name'],
+                        description=test_data['description'],
+                        question_count=test_data['question_count'],
+                        expiry_date=datetime.datetime.strptime(test_data['expiry_date'], "%Y-%m-%dT%H:%M") if test_data['expiry_date'] else None,
+                        scores_need_to_pass=test_data['scores_need_to_pass'],
+                        groups_with_access=", ".join(test_data['groups']) if test_data['groups'] else None,
+                        duration=test_data['duration'],
+                        number_of_attempts=test_data['number_of_attempts']
+                    )
+                    db_session.add(test)
+                    db_session.flush()  # Получаем ID теста для добавления вопросов
+
+                    # Добавляем каждый вопрос
+                    for q_data in questions_data:
+                        question = Question(
+                            test_id=test.id,
+                            question_text=q_data['question_text'],
+                            question_type=q_data['question_type'],
+                            options=q_data['options'] if 'options' in q_data else None,
+                            right_answer=q_data['right_answer']
+                        )
+                        db_session.add(question)
+
+                    try:
+                        db_session.commit()
+                    except Exception as e:
+                        db_session.rollback()
+                        flash('Ошибка при сохранении вопросов.')
+                        return redirect(url_for('create_test'))
+
+                # Очищаем сессию Flask
+                flask_session.pop('test_data', None)
+                flask_session.pop('questions_data', None)
+
+                flash('Тест успешно создан.')
+                return redirect(url_for('admin_panel'))
+
+            elif action == 'next':
+                # Переходим к следующему вопросу
+                if question_index + 1 < num_questions:
+                    return redirect(url_for('create_questions', test_id=test_id, num_questions=num_questions, question_index=question_index + 1))
+                else:
+                    # Если это последний вопрос, предлагаем сохранить тест
+                    flash('Вы заполнили все вопросы. Проверьте их и сохраните тест.')
+                    return redirect(url_for('create_questions', test_id=test_id, num_questions=num_questions, question_index=question_index))
 
     # GET-запрос для отображения формы создания вопроса
-    return render_template('create_questions.html', test_id=test_id, num_questions=num_questions)
+    # Получаем данные вопроса из сессии, если они есть
+    question_data = None
+    if 'questions_data' in flask_session and 0 <= question_index < num_questions:
+        question_data = flask_session['questions_data'][question_index]
 
+    return render_template('create_questions.html', test_id=test_id, num_questions=num_questions, question_index=question_index, question_data=question_data)
+
+
+# Редактирование теста
 @app.route('/edit_test/<int:test_id>', methods=['GET', 'POST'])
 def edit_test(test_id):
     with DbSession() as db_session:
@@ -175,17 +247,32 @@ def edit_test(test_id):
             test.scores_need_to_pass = int(request.form['scores_need_to_pass'])
             test.duration = int(request.form['duration'])
             test.number_of_attempts = int(request.form['number_of_attempts'])
-            groups = request.form.getlist('groups')
+            groups = request.form.getlist('groups')  # Список названий групп
             test.groups_with_access = ", ".join(groups) if groups else None
 
-            # Сохраняем изменения
-            db_session.commit()
-            flash('Тест успешно обновлён.')
-            return redirect(url_for('admin_panel'))
+            # Валидация данных
+            errors = []
+            if test.scores_need_to_pass > test.question_count:
+                errors.append("Баллы для прохождения не могут превышать количество вопросов.")
+            if test.duration < 1:
+                errors.append("Длительность теста должна быть не менее 1 минуты.")
+            if test.expiry_date and (test.expiry_date - datetime.datetime.utcnow()) < datetime.timedelta(minutes=1):
+                errors.append("Дата окончания должна быть больше текущего времени на 1 минуту.")
+
+            if errors:
+                for error in errors:
+                    flash(error, 'error')
+                # Остаёмся на странице редактирования теста
+                return redirect(url_for('edit_test', test_id=test.id))
+            else:
+                db_session.commit()
+                flash('Тест успешно обновлён.', 'success')
+                return redirect(url_for('admin_panel'))
 
         # Получаем список групп для отображения в форме
         groups = db_session.query(Group).all()
-        selected_groups = test.groups_with_access.split(", ") if test.groups_with_access else []
+        # Парсим список названий групп с доступом
+        selected_groups = [g.strip() for g in test.groups_with_access.split(",")] if test.groups_with_access else []
 
     return render_template('edit_test.html', test=test, groups=groups, selected_groups=selected_groups)
 
@@ -257,90 +344,51 @@ def edit_question(question_id):
 
     return render_template('edit_question.html', question=question)
 
-@app.route('/view_results/<int:test_id>', methods=['GET'], endpoint='view_results')
+
+# Отображение результатов теста
+@app.route('/view_results/<int:test_id>')
 def view_results(test_id):
     with DbSession() as db_session:
+        # Получение теста
         test = db_session.query(Test).filter_by(id=test_id).first()
         if not test:
             flash('Тест не найден.')
             return redirect(url_for('admin_panel'))
 
-        # Получаем параметры фильтра из URL
-        user_id = request.args.get('user_id')
-        passed = request.args.get('passed')
+        # Получение фильтров из GET-параметров
+        selected_groups = [g.strip() for g in request.args.getlist('group') if g.strip()]
+        selected_status = request.args.get('status')
 
-        # Базовый запрос
-        query = db_session.query(TestAttempt).filter_by(test_id=test_id)
+        # Начало запроса для получения попыток с жадной загрузкой связанных данных
+        query = db_session.query(TestAttempt).options(
+            joinedload(TestAttempt.user).joinedload(User.group_rel)
+        ).filter(TestAttempt.test_id == test_id)
 
-        # Применяем фильтры
-        if user_id:
-            query = query.filter(TestAttempt.user_id == user_id)
-        if passed == 'true':
+        # Применение фильтра по группам, если выбран
+        if selected_groups:
+            # Фильтрация через присоединение к таблице Group
+            query = query.join(TestAttempt.user).filter(Group.groupname.in_(selected_groups))
+
+        # Применение фильтра по статусу прохождения, если выбран
+        if selected_status == 'passed':
             query = query.filter(TestAttempt.passed == True)
-        elif passed == 'false':
+        elif selected_status == 'failed':
             query = query.filter(TestAttempt.passed == False)
 
+        # Получение всех попыток
         attempts = query.all()
 
-    return render_template('view_results.html', test=test, attempts=attempts)
+        # Получение всех групп для отображения в фильтре
+        groups = db_session.query(Group).all()
 
-
-# Сохранение теста и всех вопросов в базу данных после завершения
-@app.route('/save_test')
-def save_test():
-    print(f"Session test_data: {flask_session.get('test_data')}")
-    print(f"Session questions_data: {flask_session.get('questions_data')}")
-    # Проверяем, что данные теста и вопросов есть в сессии Flask
-    if 'test_data' not in flask_session or 'questions_data' not in flask_session:
-        flash('Не удалось сохранить тест. Повторите попытку.')
-        return redirect(url_for('create_test'))
-    print(f"Current session questions_data: {flask_session['questions_data']}")
-
-    test_data = flask_session['test_data']
-    questions_data = flask_session['questions_data']
-
-    # Сохраняем тест и вопросы в базе данных в одной транзакции
-    with DbSession() as db_session:
-        test = Test(
-            test_name=test_data['test_name'],
-            description=test_data['description'],
-            question_count=test_data['question_count'],
-            expiry_date=datetime.datetime.strptime(test_data['expiry_date'], "%Y-%m-%dT%H:%M") if test_data[
-                'expiry_date'] else None,
-            scores_need_to_pass=test_data['scores_need_to_pass'],
-            groups_with_access=", ".join(test_data['groups']) if test_data['groups'] else None,
-            duration=test_data['duration'],
-            number_of_attempts=test_data['number_of_attempts']
-        )
-        db_session.add(test)
-        db_session.flush()  # Получаем ID теста для добавления вопросов
-        print(questions_data)
-        # Добавляем каждый вопрос
-        for q_data in questions_data:
-            print(f"Adding question: {q_data}")  # Отладочный вывод
-            question = Question(
-                test_id=test.id,
-                question_text=q_data['question_text'],
-                question_type=q_data['question_type'],
-                options=q_data['options'] if 'options' in q_data else None,
-                right_answer=q_data['right_answer']
-            )
-            db_session.add(question)
-
-        try:
-            db_session.commit()
-            print("Questions committed successfully.")
-        except Exception as e:
-            print(f"Error while committing questions: {e}")
-            db_session.rollback()
-            flash('Ошибка при сохранении вопросов.')
-            return redirect(url_for('create_test'))
-
-    # Очищаем сессию Flask
-    flask_session.pop('test_data', None)
-    flask_session.pop('questions_data', None)
-
-    return redirect(url_for('admin_panel'))
+    return render_template(
+        'view_results.html',
+        test=test,
+        attempts=attempts,
+        groups=groups,
+        selected_groups=selected_groups,
+        selected_status=selected_status
+    )
 
 
 if __name__ == '__main__':

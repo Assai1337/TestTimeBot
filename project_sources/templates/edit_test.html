@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <title>Редактировать тест</title>
-    <!-- Подключаем общие стили и стили для страницы создания теста -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/create_test.css') }}">
 </head>
@@ -11,17 +10,20 @@
     <div class="container">
         <h2>Редактировать тест</h2>
 
-        {% with messages = get_flashed_messages() %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-                <ul class="error-messages">
-                    {% for message in messages %}
-                        <li>{{ message }}</li>
+                <ul class="messages">
+                    {% for category, message in messages %}
+                        <li class="{{ category }}">{{ message }}</li>
                     {% endfor %}
                 </ul>
             {% endif %}
         {% endwith %}
 
+
         <form action="{{ url_for('edit_test', test_id=test.id) }}" method="post" class="create-test-form">
+            {# {{ form.hidden_tag() }} #} <!-- Закомментировано корректным способом -->
+
             <label>Название теста:
                 <input type="text" name="test_name" value="{{ test.test_name }}" required>
             </label>
@@ -33,7 +35,6 @@
             <label>Количество вопросов:
                 <input type="number" name="question_count" min="1" value="{{ test.question_count }}" required readonly>
             </label>
-
 
             <label>Дата окончания:
                 <input type="datetime-local" name="expiry_date" value="{{ test.expiry_date.strftime('%Y-%m-%dT%H:%M') if test.expiry_date else '' }}">
@@ -55,8 +56,8 @@
                 <legend>Группы с доступом:</legend>
                 {% for group in groups %}
                     <label>
-                        <input type="checkbox" name="groups" value="{{ group.groupname }}" {% if group.groupname in selected_groups %}checked{% endif %}>
-                        {{ group.groupname }}
+                        <input type="checkbox" name="groups" value="{{ group.groupname|trim }}" {% if group.groupname|trim in selected_groups %}checked{% endif %}>
+                        {{ group.groupname|trim }}
                     </label>
                 {% endfor %}
             </fieldset>
@@ -67,4 +68,3 @@
 <script src="{{ url_for('static', filename='js/edit_test_script.js') }}"></script>
 </body>
 </html>
-

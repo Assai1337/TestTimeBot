@@ -3,14 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <title>Добавить вопрос</title>
-    <!-- Подключаем общие стили и стили для этой страницы -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/create_questions.css') }}">
 </head>
 <body>
     <div class="container">
-        <h2>Добавить вопрос к тесту</h2>
-        <!-- Блок для отображения сообщений об ошибках -->
+        <h2>Вопрос {{ question_index + 1 }} из {{ num_questions }}</h2>
         {% with messages = get_flashed_messages() %}
             {% if messages %}
                 <ul class="error-messages">
@@ -21,39 +19,80 @@
             {% endif %}
         {% endwith %}
 
-        <form action="{{ url_for('create_questions', test_id=test_id, num_questions=num_questions) }}" method="post" class="create-questions-form" onsubmit="return validateForm()">
+        <form id="question_form" action="{{ url_for('create_questions', test_id=test_id, num_questions=num_questions, question_index=question_index) }}" method="post" class="create-questions-form">
+            <!-- Скрытое поле для определения действия -->
+            <input type="hidden" name="action" id="action" value="">
+
             <label>Текст вопроса:
-                <textarea name="question_text" required></textarea>
+                <textarea name="question_text" required>{{ question_data.question_text if question_data else '' }}</textarea>
             </label>
 
             <label>Тип вопроса:
                 <select name="question_type" id="question_type" onchange="updateOptionBehavior()">
-                    <option value="single_choice">Одиночный выбор</option>
-                    <option value="multiple_choice">Множественный выбор</option>
-                    <option value="text_input">Текстовый ответ</option>
+                    <option value="single_choice" {% if question_data and question_data.question_type == 'single_choice' %}selected{% endif %}>Одиночный выбор</option>
+                    <option value="multiple_choice" {% if question_data and question_data.question_type == 'multiple_choice' %}selected{% endif %}>Множественный выбор</option>
+                    <option value="text_input" {% if question_data and question_data.question_type == 'text_input' %}selected{% endif %}>Текстовый ответ</option>
                 </select>
             </label>
 
-            <!-- Поле для ввода текстового ответа -->
             <div id="text_answer_container" style="display: none;">
                 <label>Ответ:
-                    <input type="text" name="text_answer">
+                    <input type="text" name="text_answer" value="{{ question_data.right_answer if question_data and question_data.question_type == 'text_input' else '' }}">
                 </label>
             </div>
 
-            <!-- Блок для вариантов ответов -->
             <div id="options_container">
                 <label>Варианты ответов (для вопросов с выбором):</label>
-                <!-- Здесь будут динамически добавляться варианты -->
+                {% if question_data and question_data.options %}
+                    {% for option in question_data.options %}
+                    <div class="option">
+                        <input type="text" name="options" value="{{ option.text }}" required>
+                        <label>Правильный:
+                            <input type="checkbox" name="correct_options" class="correct-checkbox" value="{{ loop.index }}" {% if option.is_correct %}checked{% endif %}>
+                        </label>
+                        <button type="button" class="delete-option-button" onclick="deleteOption(this)">&#10006;</button>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <!-- Добавим два пустых варианта по умолчанию -->
+                    <div class="option">
+                        <input type="text" name="options" value="" required>
+                        <label>Правильный:
+                            <input type="checkbox" name="correct_options" class="correct-checkbox" value="1">
+                        </label>
+                        <button type="button" class="delete-option-button" onclick="deleteOption(this)">&#10006;</button>
+                    </div>
+                    <div class="option">
+                        <input type="text" name="options" value="" required>
+                        <label>Правильный:
+                            <input type="checkbox" name="correct_options" class="correct-checkbox" value="2">
+                        </label>
+                        <button type="button" class="delete-option-button" onclick="deleteOption(this)">&#10006;</button>
+                    </div>
+                {% endif %}
             </div>
 
-            <!-- Кнопка "Добавить вариант ответа" с добавленным id -->
             <button type="button" id="add_option_button" onclick="addOption()">Добавить вариант ответа</button>
-            <button type="submit">Сохранить вопрос</button>
+
+            <div class="navigation-buttons">
+                {% if question_index > 0 %}
+                <button type="submit" name="prev" onclick="setAction('prev')" formnovalidate>Предыдущий вопрос</button>
+                {% endif %}
+                {% if question_index + 1 < num_questions %}
+                <button type="submit" name="next" onclick="setAction('next')">Следующий вопрос</button>
+                {% else %}
+                <button type="submit" name="save" onclick="setAction('save')">Сохранить тест</button>
+                {% endif %}
+            </div>
+
         </form>
     </div>
-
-    <!-- Подключаем внешний JS-файл -->
+    <script>
+        // Функция для установки действия в скрытое поле
+        function setAction(action) {
+            document.getElementById('action').value = action;
+        }
+    </script>
     <script src="{{ url_for('static', filename='js/create_questions_script.js') }}"></script>
 </body>
 </html>

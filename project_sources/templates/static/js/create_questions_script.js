@@ -14,6 +14,7 @@ function addOption(optionText = '', isCorrect = false) {
         <button type="button" class="delete-option-button" onclick="deleteOption(this)">&#10006;</button>
     `;
     container.appendChild(newOption);
+    updateOptionIndices();
     updateOptionBehavior(); // Обновляем поведение чекбоксов
 }
 
@@ -33,7 +34,7 @@ function deleteOption(button) {
     }
 }
 
-// Функция для перенумерации вариантов после удаления
+// Функция для перенумерации вариантов после удаления или добавления
 function updateOptionIndices() {
     const options = document.querySelectorAll('.option');
     options.forEach((option, index) => {
@@ -67,10 +68,9 @@ function updateOptionBehavior() {
             optionCount++;
         }
 
-        // Сбрасываем все чекбоксы при переключении типа вопроса
+        // Сбрасываем все обработчики событий
         const checkboxes = document.querySelectorAll('.correct-checkbox');
         checkboxes.forEach((checkbox) => {
-            checkbox.checked = false;
             checkbox.onclick = null; // Сбрасываем обработчики
         });
 
@@ -97,8 +97,24 @@ function singleChoiceHandler() {
 }
 
 // Функция для валидации формы перед отправкой
-function validateForm() {
+function validateForm(event) {
+    // Получаем значение скрытого поля 'action'
+    const action = document.getElementById('action').value;
+    console.log("Action:", action); // Отладочный вывод
+
+    if (action === 'prev') {
+        // Не выполняем валидацию при нажатии на "Предыдущий вопрос"
+        return true;
+    }
+
+    // Продолжаем с валидацией для кнопок "next" и "save"
     const questionType = document.getElementById('question_type').value;
+
+    const questionText = document.querySelector('textarea[name="question_text"]').value.trim();
+    if (questionText === '') {
+        alert('Поле текста вопроса не может быть пустым.');
+        return false;
+    }
 
     if (questionType === "text_input") {
         const textAnswer = document.querySelector('input[name="text_answer"]').value.trim();
@@ -132,10 +148,18 @@ function validateForm() {
             return false;
         }
     }
-    return true; // Если все проверки пройдены, разрешаем отправку формы
+    return true; // Если все проверки пройдены
 }
 
 // Инициализация на загрузку страницы
 document.addEventListener("DOMContentLoaded", function() {
     updateOptionBehavior();
+
+    // Добавляем обработчик события submit для формы
+    const form = document.getElementById('question_form');
+    form.addEventListener('submit', function(event) {
+        if (!validateForm(event)) {
+            event.preventDefault(); // Предотвращаем отправку формы, если валидация не пройдена
+        }
+    });
 });

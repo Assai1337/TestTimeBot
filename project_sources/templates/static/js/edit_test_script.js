@@ -1,5 +1,3 @@
-// static/js/edit_test_script.js
-
 document.addEventListener('DOMContentLoaded', function() {
     // Блокируем поле "Количество вопросов"
     const questionCountInput = document.querySelector('input[name="question_count"]');
@@ -31,9 +29,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const expiryDateValue = expiryDateInput.value;
         if (expiryDateValue) {
             const expiryDate = new Date(expiryDateValue);
-            // Проверяем, что дата окончания как минимум на 30 минут больше текущего времени
+            // Проверяем, что дата окончания как минимум на 1 минуту больше текущего времени
             if (expiryDate - currentTime < 1 * 60 * 1000) {
-                alert('Дата окончания должна быть больше текущего времени на 30 минут.');
+                alert('Дата окончания должна быть больше текущего времени на 1 минуту.');
                 event.preventDefault();
             }
         }

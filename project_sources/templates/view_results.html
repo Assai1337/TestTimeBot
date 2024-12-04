@@ -3,56 +3,98 @@
 <head>
     <meta charset="UTF-8">
     <title>Результаты теста "{{ test.test_name }}"</title>
-    <!-- Подключаем общие стили -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    <!-- Можно добавить отдельный CSS-файл для этой страницы -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/view_results.css') }}">
+    <script>
+        // Функция для автоматической отправки формы при изменении фильтра
+        function autoSubmitForm() {
+            document.getElementById('filter-form').submit();
+        }
+    </script>
 </head>
 <body>
     <div class="container">
         <h2>Результаты теста "{{ test.test_name }}"</h2>
 
-        <!-- Форма для фильтрации -->
-        <form method="get" class="filter-form">
+        <!-- Форма фильтрации -->
+        <form method="get" id="filter-form" class="filter-form">
+            <!-- Фильтр по группам -->
             <label>
-                ID пользователя:
-                <input type="text" name="user_id" value="{{ request.args.get('user_id', '') }}">
-            </label>
-
-            <label>
-                Статус прохождения:
-                <select name="passed">
-                    <option value="">Все</option>
-                    <option value="true" {% if request.args.get('passed') == 'true' %}selected{% endif %}>Сдал</option>
-                    <option value="false" {% if request.args.get('passed') == 'false' %}selected{% endif %}>Не сдал</option>
+                Группа:
+                <select name="group" multiple onchange="autoSubmitForm()">
+                    <!-- Опция для всех групп -->
+                    <option value="" {% if not selected_groups %}selected{% endif %}>Все группы</option>
+                    {% for group in groups %}
+                        <option value="{{ group.groupname|trim }}"
+                            {% if group.groupname|trim in selected_groups %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ group.groupname|trim }}
+                        </option>
+                    {% endfor %}
                 </select>
             </label>
 
+            <!-- Фильтр по статусу прохождения -->
+            <label>
+                Статус прохождения:
+                <select name="status" onchange="autoSubmitForm()">
+                    <option value="" {% if not selected_status %}selected{% endif %}>Все попытки</option>
+                    <option value="passed" {% if selected_status == 'passed' %}selected{% endif %}>Сдал</option>
+                    <option value="failed" {% if selected_status == 'failed' %}selected{% endif %}>Не сдал</option>
+                </select>
+            </label>
+
+            <!-- Кнопка для ручного применения фильтров (опционально) -->
+            <!--
             <button type="submit">Применить фильтры</button>
+            -->
         </form>
 
+        <!-- Таблица результатов -->
         <table>
             <thead>
                 <tr>
-                    <th>ID пользователя</th>
-                    <th>Имя пользователя</th>
-                    <th>Дата начала</th>
-                    <th>Дата окончания</th>
-                    <th>Оценка</th>
+                    <th>ФИО</th>
+                    <th>Группа</th>
+                    <th>Балл за попытку</th>
                     <th>Статус</th>
                 </tr>
             </thead>
             <tbody>
                 {% for attempt in attempts %}
                 <tr>
-                    <td>{{ attempt.user.user_id }}</td>
-                    <td>{{ attempt.user.username }}</td>
-                    <td>{{ attempt.start_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                    <td>{{ attempt.end_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                    <td>{{ attempt.score }}</td>
+                    <!-- ФИО пользователя -->
+                    <td>
+                        {{ attempt.user.firstname }} {{ attempt.user.lastname }}
+                        {% if attempt.user.middlename %}
+                            {{ attempt.user.middlename }}
+                        {% endif %}
+                    </td>
+
+                    <!-- Группа пользователя -->
+                    <td>{{ attempt.user.group_rel.groupname|trim }}</td>
+
+                    <!-- Балл за попытку в формате "балл за попытку/балл максимальный" -->
+                    <td>
+                        {% if test.question_count %}
+                            {{ attempt.score }} / {{ test.question_count }}
+                        {% else %}
+                            {{ attempt.score }} / -
+                        {% endif %}
+                    </td>
+
+                    <!-- Статус прохождения -->
                     <td>{{ "Сдал" if attempt.passed else "Не сдал" }}</td>
                 </tr>
                 {% endfor %}
+
+                {% if attempts|length == 0 %}
+                <tr>
+                    <td colspan="4">Нет данных для отображения.</td>
+                </tr>
+                {% endif %}
             </tbody>
         </table>
 

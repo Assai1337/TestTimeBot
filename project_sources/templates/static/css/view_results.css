@@ -1,0 +1,166 @@
+/* view_results.css */
+
+/* Стили для контейнера */
+.container {
+    width: 90%;
+    max-width: 1200px;
+    margin: 40px auto;
+    background-color: #fff;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Заголовок страницы */
+.container h2 {
+    text-align: center;
+    margin-bottom: 30px;
+    color: #2c3e50;
+}
+
+/* Форма фильтрации */
+.filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    align-items: flex-end;
+    background-color: #ecf0f1;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 30px;
+}
+
+.filter-form label {
+    flex: 1 1 200px;
+    font-weight: 500;
+    color: #34495e;
+}
+
+.filter-form select {
+    width: 100%;
+    padding: 10px 15px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    appearance: none;
+    background-color: #fff;
+    transition: border-color 0.3s ease;
+}
+
+.filter-form select:focus {
+    border-color: #3498db;
+    outline: none;
+}
+
+.filter-form button {
+    padding: 10px 25px;
+    background-color: #2ecc71;
+    color: #fff;
+    border: none;
+    border-radius: 25px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: background-color 0.3s ease;
+}
+
+.filter-form button:hover {
+    background-color: #27ae60;
+}
+
+/* Стилизация таблицы результатов */
+.container table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.container table th,
+.container table td {
+    border: 1px solid #dee2e6;
+    padding: 15px;
+    text-align: left;
+    font-size: 15px;
+}
+
+.container table th {
+    cursor: pointer;
+    background-color: #e9ecef;
+    font-weight: 600;
+}
+
+.container table tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+
+.container table tr:hover {
+    background-color: #e2e6ea;
+}
+
+/* Сообщение об отсутствии данных */
+.container table tbody tr td {
+    text-align: center;
+    padding: 20px 0;
+    color: #7f8c8d;
+}
+
+/* Кнопка возврата */
+.btn-back {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 10px 20px;
+    background-color: #95a5a6;
+    color: #fff;
+    border: none;
+    border-radius: 25px;
+    text-align: center;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    text-decoration: none;
+}
+
+.btn-back:hover {
+    background-color: #7f8c8d;
+}
+
+/* Адаптивность для мобильных устройств */
+@media (max-width: 768px) {
+    .filter-form {
+        flex-direction: column;
+    }
+
+    .filter-form label {
+        flex: 1 1 auto;
+    }
+
+    .filter-form button {
+        width: 100%;
+    }
+
+    .container table thead {
+        display: none;
+    }
+
+    .container table, .container table tbody, .container table tr, .container table td {
+        display: block;
+        width: 100%;
+    }
+
+    .container table tr {
+        margin-bottom: 15px;
+    }
+
+    .container table td {
+        text-align: right;
+        padding-left: 50%;
+        position: relative;
+    }
+
+    .container table td::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 15px;
+        width: 45%;
+        padding-right: 10px;
+        white-space: nowrap;
+        text-align: left;
+        font-weight: bold;
+    }
+}
