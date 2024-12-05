@@ -62,15 +62,23 @@ async def monitor_test_time(user_id: int, test_attempt_id: int, end_time: dateti
         # Если время уже истекло, завершаем сразу
         delay = 0
 
-    # Создаём новую сессию
-    async with async_session() as session:
-        # Получаем TestAttempt
-        test_attempt_result = await session.execute(
-            select(TestAttempt).where(TestAttempt.id == test_attempt_id)
-        )
-        test_attempt: Optional[TestAttempt] = test_attempt_result.scalars().first()
+    # Проверяем состояние пользователя на наличие текущего активного теста
+    state_data = await state.get_data()
+    if state_data.get('test_attempt_id') != test_attempt_id:
+        logger.info(f"Мониторинг времени завершён, так как текущая попытка не соответствует ID {test_attempt_id}.")
+    elif state_data.get('test_attempt_id')==test_attempt_id and await state.get_state()==TestStates.TESTING.state:
+        # Создаём новую сессию
+        async with async_session() as session:
+            # Получаем TestAttempt
+            test_attempt_result = await session.execute(
+                select(TestAttempt).where(TestAttempt.id == test_attempt_id)
+            )
+            test_attempt: Optional[TestAttempt] = test_attempt_result.scalars().first()
 
-        if test_attempt and not test_attempt.passed and current_time() >= test_attempt.end_time:
+            # Проверяем, завершён ли тест
+
+
+
             # Тест ещё не завершён и время истекло
             # Получаем Test и Questions
             test_result = await session.execute(
