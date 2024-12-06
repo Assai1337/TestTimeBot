@@ -47,8 +47,8 @@ def get_main_menu(username: str) -> ReplyKeyboardMarkup:
         [KeyboardButton(text="Доступные тесты")],
         [KeyboardButton(text="Пройденные тесты")]
     ]
-    if username == ADMIN_USERNAME:
-        buttons.append([KeyboardButton(text="Админ панель")])
+    # if username == ADMIN_USERNAME:
+    #     buttons.append([KeyboardButton(text="Админ панель")])
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 # Обработчик команды /start
@@ -140,16 +140,16 @@ async def register_new_user(message: types.Message, state: FSMContext, session: 
         await message.reply("Произошла ошибка при регистрации. Попробуйте позже.")
 
 # Обработчик кнопки "Админ панель"
-@router.message(lambda message: message.text == "Админ панель")
-async def admin_panel_handler(message: types.Message):
-    if message.from_user.username == ADMIN_USERNAME:
-        await message.answer(
-            "Добро пожаловать в админ панель!\n"
-            "[Открыть админ панель](http://localhost:5000/admin)",
-            parse_mode="Markdown"
-        )
-    else:
-        await message.answer("У вас нет доступа к админ панели.")
+# @router.message(lambda message: message.text == "Админ панель")
+# async def admin_panel_handler(message: types.Message):
+#     if message.from_user.username == ADMIN_USERNAME:
+#         await message.answer(
+#             "Добро пожаловать в админ панель!\n"
+#             "[Открыть админ панель](http://localhost:5000/admin)",
+#             parse_mode="Markdown"
+#         )
+#     else:
+#         await message.answer("У вас нет доступа к админ панели.")
 
 # Обработчик кнопки "Доступные тесты" с проверкой состояния
 @router.message(lambda message: message.text == "Доступные тесты")
