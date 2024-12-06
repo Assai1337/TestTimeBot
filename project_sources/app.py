@@ -291,9 +291,11 @@ def edit_questions(test_id):
     return render_template('edit_questions.html', test=test, questions=questions)
 
 
+# Редактирование вопроса
 @app.route('/edit_question/<int:question_id>', methods=['GET', 'POST'])
 def edit_question(question_id):
     with DbSession() as db_session:
+        # Получаем вопрос из базы данных
         question = db_session.query(Question).filter_by(id=question_id).first()
         if not question:
             flash('Вопрос не найден.')
@@ -342,7 +344,8 @@ def edit_question(question_id):
             flash('Вопрос успешно обновлён.')
             return redirect(url_for('edit_questions', test_id=question.test_id))
 
-    return render_template('edit_question.html', question=question)
+    return render_template('edit_question.html', question=question, question_id=question_id)
+
 
 
 # Отображение результатов теста
@@ -358,6 +361,7 @@ def view_results(test_id):
         # Получение фильтров из GET-параметров
         selected_groups = [g.strip() for g in request.args.getlist('group') if g.strip()]
         selected_status = request.args.get('status')
+        successful_users = request.args.get('successful_users')
 
         # Начало запроса для получения попыток с жадной загрузкой связанных данных
         query = db_session.query(TestAttempt).options(
@@ -366,8 +370,7 @@ def view_results(test_id):
 
         # Применение фильтра по группам, если выбран
         if selected_groups:
-            # Фильтрация через присоединение к таблице Group
-            query = query.join(TestAttempt.user).filter(Group.groupname.in_(selected_groups))
+            query = query.join(TestAttempt.user).filter(User.group_rel.has(Group.groupname.in_(selected_groups)))
 
         # Применение фильтра по статусу прохождения, если выбран
         if selected_status == 'passed':
@@ -375,8 +378,17 @@ def view_results(test_id):
         elif selected_status == 'failed':
             query = query.filter(TestAttempt.passed == False)
 
-        # Получение всех попыток
-        attempts = query.all()
+        # Если выбраны успешные пользователи, фильтруем по лучшим попыткам
+        if successful_users == 'true':
+            all_attempts = query.filter(TestAttempt.passed == True).all()
+            best_attempts = {}
+            for attempt in all_attempts:
+                user_id = attempt.user.id
+                if user_id not in best_attempts or best_attempts[user_id].score < attempt.score:
+                    best_attempts[user_id] = attempt
+            attempts = list(best_attempts.values())
+        else:
+            attempts = query.all()
 
         # Получение всех групп для отображения в фильтре
         groups = db_session.query(Group).all()
@@ -389,7 +401,6 @@ def view_results(test_id):
         selected_groups=selected_groups,
         selected_status=selected_status
     )
-
 
 if __name__ == '__main__':
     app.run(debug=True)

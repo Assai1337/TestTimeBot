@@ -1,0 +1,79 @@
+/* Стили для страницы редактирования вопросов */
+
+.edit-question-form {
+    background-color: #ffffff;
+    padding: 40px;
+    border-radius: 8px;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+}
+
+.edit-question-form label {
+    display: block;
+    margin-bottom: 20px;
+    font-weight: 500;
+    color: #555;
+}
+
+.edit-question-form textarea,
+.edit-question-form input[type="text"],
+.edit-question-form select {
+    width: 100%;
+    padding: 12px 15px;
+    margin-top: 8px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 15px;
+}
+
+.option {
+    margin-bottom: 15px;
+}
+
+.option input[type="text"] {
+    width: calc(100% - 160px);
+    padding: 10px;
+}
+
+.option label {
+    display: inline-block;
+    margin-left: 10px;
+    font-weight: normal;
+    color: #333;
+}
+
+.edit-question-form button[type="button"],
+.edit-question-form button[type="submit"],
+.edit-question-form .btn-back {
+    background-color: #007bff;
+    color: #ffffff;
+    padding: 12px 25px;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    margin-top: 15px;
+    transition: background-color 0.3s;
+    text-decoration: none;
+    text-align: center;
+}
+
+.edit-question-form button[type="button"]:hover,
+.edit-question-form button[type="submit"]:hover,
+.edit-question-form .btn-back:hover {
+    background-color: #0056b3;
+}
+
+#text_answer_container {
+    margin-bottom: 20px;
+}
+
+.error-messages {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 20px;
+}
+
+.error-messages li {
+    list-style-type: none;
+}
