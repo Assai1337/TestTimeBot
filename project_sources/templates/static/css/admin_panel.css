@@ -64,3 +64,66 @@
 .expired-test {
     background-color: rgb(221, 247, 203);
 }
+
+.admin-panel table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-top: 20px;
+}
+
+.admin-panel table th,
+.admin-panel table td {
+    border-bottom: 1px solid #dee2e6;
+    padding: 12px 10px;
+    text-align: left;
+    font-size: 14px;
+    word-wrap: break-word;
+    max-width: 150px;
+}
+
+.admin-panel table th {
+    cursor: pointer;
+    background-color: #f1f3f5;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.admin-panel table td {
+    vertical-align: top;
+}
+
+.admin-panel table thead tr {
+    background-color: #e9ecef;
+}
+
+.admin-panel table tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+
+.admin-panel table tr:hover {
+    background-color: #f1f5f9;
+}
+
+/* Адаптивные стили */
+@media (max-width: 768px) {
+    .admin-panel table th, .admin-panel table td {
+        display: block;
+        text-align: right;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .admin-panel table th {
+        background-color: transparent;
+        font-weight: 700;
+    }
+
+    .admin-panel table td:before {
+        content: attr(data-label);
+        float: left;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+}
