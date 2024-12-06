@@ -618,10 +618,16 @@ async def send_attempt_question(message: types.Message, state: FSMContext):
     question_text = f"Вопрос {question_index + 1}/{len(questions)}:\n\n{current_question.question_text}\n\n"
 
     if current_question.question_type in ['single_choice', 'multiple_choice']:
+        if current_question.question_type == 'multiple_choice':
+            question_text += f"Выберите один вариант ответа:\n"
+        else:
+            question_text += f"Выберите один или несколько вариантов ответа:\n"
+
         options_text = ""
         for idx, option in enumerate(current_question.options, start=1):
             option_id_str = str(option['id'])
             if current_question.question_type == 'single_choice':
+
                 selected = (option_id_str == user_answer_list[0]) if user_answer_list else False
             elif current_question.question_type == 'multiple_choice':
                 selected = (option_id_str in user_answer_list)
