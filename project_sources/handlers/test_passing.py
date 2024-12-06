@@ -75,12 +75,6 @@ async def monitor_test_time(user_id: int, test_attempt_id: int, end_time: dateti
             )
             test_attempt: Optional[TestAttempt] = test_attempt_result.scalars().first()
 
-            # Проверяем, завершён ли тест
-
-
-
-            # Тест ещё не завершён и время истекло
-            # Получаем Test и Questions
             test_result = await session.execute(
                 select(Test).where(Test.id == test_attempt.test_id))
             test: Optional[Test] = test_result.scalars().first()
