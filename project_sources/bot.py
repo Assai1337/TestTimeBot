@@ -30,7 +30,6 @@ dp.callback_query.middleware(DbSessionMiddleware(async_session))
 
 register_handlers(dp)
 
-
 async def main():
     # Запуск бота
     await dp.start_polling(bot, skip_updates=True)

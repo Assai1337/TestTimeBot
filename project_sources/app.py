@@ -1,4 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session as flask_session
+from flask import make_response
+import pandas as pd
 from flask import abort
 from flask_session import Session
 from sqlalchemy import create_engine
@@ -6,6 +8,9 @@ from sqlalchemy.orm import sessionmaker,joinedload
 from tools.models import Base, User, Test, Question, TestAttempt, Group
 import tools.config as config
 import datetime
+from io import BytesIO
+from urllib.parse import quote
+import pandas as pd
 
 app = Flask(__name__,
             static_folder='templates/static',
@@ -401,6 +406,62 @@ def view_results(test_id):
         selected_groups=selected_groups,
         selected_status=selected_status
     )
+
+from flask import make_response
+from io import BytesIO
+import pandas as pd
+
+@app.route('/download_results/<int:test_id>', methods=['GET'])
+def download_results(test_id):
+    with DbSession() as db_session:
+        # Получение теста
+        test = db_session.query(Test).filter_by(id=test_id).first()
+        if not test:
+            flash('Тест не найден.')
+            return redirect(url_for('view_results', test_id=test_id))
+
+        # Получение всех попыток
+        attempts = db_session.query(TestAttempt).options(
+            joinedload(TestAttempt.user).joinedload(User.group_rel)
+        ).filter(TestAttempt.test_id == test_id).all()
+
+        # Формирование данных для Excel
+        user_best_attempts = {}
+        for attempt in attempts:
+            user_id = attempt.user.id
+            # Сохраняем только самую успешную попытку
+            if user_id not in user_best_attempts or user_best_attempts[user_id].score < attempt.score:
+                user_best_attempts[user_id] = attempt
+
+        # Подготовка данных для DataFrame
+        data = []
+        for attempt in user_best_attempts.values():
+            data.append({
+                "ФИО": f"{attempt.user.firstname} {attempt.user.lastname} {attempt.user.middlename or ''}".strip(),
+                "Группа": attempt.user.group_rel.groupname,
+                "Балл за попытку": f"{attempt.score} / {test.question_count}" if test.question_count else f"{attempt.score} / -",
+                "Статус": "Сдал" if attempt.passed else "Не сдал"
+            })
+
+        # Создание DataFrame
+        df = pd.DataFrame(data)
+
+        # Создание Excel файла в буфере
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name="Results")
+        output.seek(0)
+
+        # Формирование имени файла
+        original_filename = f"{test.test_name.replace(' ', '_')}.xlsx"
+        ascii_filename = quote(original_filename)  # Кодирование имени файла в ASCII
+
+        # Создание HTTP-ответа с вложением
+        response = make_response(output.read())
+        response.headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{ascii_filename}"
+        response.headers["Content-Type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return response
+
 
 if __name__ == '__main__':
     app.run(debug=True)
