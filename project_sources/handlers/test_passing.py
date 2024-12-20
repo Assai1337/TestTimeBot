@@ -347,15 +347,7 @@ async def edit_answer(callback: types.CallbackQuery, state: FSMContext, session:
     current_question: Question = questions[current_index]
 
     if current_question.question_type != "text_input":
-        await callback.message.answer("Этот вопрос не поддерживает текстовый ввод.")
         return
-
-    existing_answer = test_data["answers"].get(str(current_question.id), "")
-    await callback.message.answer(
-        f"Введите новый ответ для вопроса:\n\n{current_question.question_text}\n\n"
-        f"Текущий ответ: {existing_answer if existing_answer else 'Нет ответа'}",
-        reply_markup=types.ReplyKeyboardRemove()
-    )
 
     await state.set_state(TestStates.EDITING.state)
     await state.update_data(editing_question_id=current_question.id)
@@ -392,8 +384,6 @@ async def handle_text_edit(message: types.Message, state: FSMContext, session: A
             logger.error(f"Ошибка при обновлении попытки теста: {e}")
 
     await state.set_state(TestStates.TESTING.state)
-
-    await message.answer("Ответ обновлен.", reply_markup=types.ReplyKeyboardRemove())
     await send_question(message, state)
 
 
@@ -577,6 +567,7 @@ async def send_question(message: types.Message, state: FSMContext):
             time_left_str = f"{minutes} мин {seconds} сек"
         else:
             time_left_str = "0 мин 0 сек"
+
     else:
         time_left_str = "неизвестно"
 
@@ -589,13 +580,14 @@ async def send_question(message: types.Message, state: FSMContext):
     if current_question.question_type == "text_input":
         current_answer = answers.get(str(current_question.id), "")
         question_text += f"Текущий ответ: {current_answer if current_answer else 'Нет ответа'}\n\n"
+        question_text += f"Чтобы редактировать ответ, нажмите на кнопку ✏️ Редактировать ответ\n\n"
+
+
     else:
         if current_question.question_type == "single_choice":
             question_text += "Выберите один вариант ответа:\n\n"
         elif current_question.question_type == "multiple_choice":
             question_text += "Выберите один или несколько вариантов ответа:\n\n"
-        else:
-            question_text += "Введите ответ:\n\n"
 
         for idx, option in enumerate(current_question.options, start=1):
             if current_question.question_type in ["single_choice", "multiple_choice"]:
