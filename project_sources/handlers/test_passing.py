@@ -380,6 +380,10 @@ async def handle_text_edit(message: types.Message, state: FSMContext, session: A
     logger.debug("State changed to TESTING in handle_text_edit after saving answer")
 
     logger.debug("Calling send_question from handle_text_edit")
+    try:
+        await message.delete()
+    except Exception as e:
+        logging.error(f"Ошибка при удалении сообщения пользователя: {e}")
     await send_question(message, state)
 
 
@@ -420,6 +424,15 @@ async def confirm_finish_yes(callback: types.CallbackQuery, state: FSMContext, s
 
     user_data = await state.get_data()
     logger.debug(f"Confirm Finish Yes - user_data={user_data}")
+
+    # Удаляем сообщение подтверждения
+    confirmation_message_id = user_data.get("confirmation_message_id")
+    if confirmation_message_id:
+        try:
+            await bot.delete_message(chat_id=callback.message.chat.id, message_id=confirmation_message_id)
+            logger.debug("Confirmation message deleted after confirm_finish_yes.")
+        except Exception as e:
+            logger.error(f"Ошибка при удалении сообщения подтверждения: {e}")
 
     test_id = user_data.get("test_id")
     test_attempt_id = user_data.get("test_attempt_id")
@@ -507,34 +520,21 @@ async def confirm_finish_no(callback: types.CallbackQuery, state: FSMContext):
 
     confirmation_message_id = user_data.get("confirmation_message_id")
     if confirmation_message_id:
-        disabled_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="✅ Да (недоступно)", callback_data="noop"),
-                InlineKeyboardButton(
-                    text="❌ Нет (завершение отменено)", callback_data="noop")
-            ]
-        ])
-
         try:
-            await callback.message.bot.edit_message_reply_markup(
+            await callback.message.bot.delete_message(
                 chat_id=callback.message.chat.id,
-                message_id=confirmation_message_id,
-                reply_markup=disabled_keyboard
+                message_id=confirmation_message_id
             )
-            logger.debug("Confirmation message buttons disabled after confirm_finish_no.")
-        except TelegramBadRequest as e:
-            logger.error(f"Ошибка при редактировании сообщения подтверждения: {e}")
+            logger.debug("Confirmation message deleted after confirm_finish_no.")
+        except Exception as e:
+            logger.error(f"Ошибка при удалении сообщения подтверждения: {e}")
 
-        await state.update_data(confirmation_message_id=None)
-
+    await state.update_data(confirmation_message_id=None)
     await state.set_state(TestStates.TESTING.state)
     logger.debug("State changed to TESTING after confirm_finish_no")
 
-    await callback.message.answer("Продолжаем тестирование.")
     logger.debug("Calling send_question from confirm_finish_no")
     await send_question(callback.message, state)
-
 
 @router.callback_query(lambda c: c.data == "noop")
 async def noop_handler(callback: types.CallbackQuery):
@@ -611,9 +611,6 @@ async def send_question(message: types.Message, state: FSMContext):
     if current_question.question_type == "text_input":
         current_answer = answers.get(str(current_question.id), "")
         question_lines.append(f"Текущий ответ: {current_answer if current_answer else 'Нет ответа'}\n\n")
-
-        # Если редактируем этот вопрос - кнопка отмены редактирования
-        # Иначе - кнопка редактировать ответ
         if editing_this_question:
             edit_button = InlineKeyboardButton(
                 text="❌ Отменить редактирование",
