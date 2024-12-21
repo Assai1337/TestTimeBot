@@ -455,8 +455,8 @@ async def confirm_finish_yes(callback: types.CallbackQuery, state: FSMContext, s
             await session.commit()
             logger.debug("Results saved after confirm_finish_yes")
             msg_text = (f"Вы успешно завершили тест. Спасибо за участие!\n\n"
-                        f"**Баллы:** {score}\n"
-                        f"**Статус:** {'✅ Пройден' if passed else '❌ Не пройден'}")
+                        f"Баллы: {score}\n"
+                        f"Статус: {'✅ Пройден' if passed else '❌ Не пройден'}")
             msg_text = escape_markdown_v2(msg_text)
             await callback.message.answer(
                 msg_text,
@@ -542,10 +542,32 @@ async def noop_handler(callback: types.CallbackQuery):
     logger.debug("noop_handler called, doing nothing.")
 
 
+@router.callback_query(lambda c: c.data == "cancel_editing")
+@check_active_test
+async def cancel_editing(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    logger.debug("cancel_editing called")
+
+    current_state = await state.get_state()
+    logger.debug(f"cancel_editing: current_state={current_state}")
+
+    # Если мы не в EDITING, просто игнорируем или сообщаем, что нечего отменять
+    if current_state != TestStates.EDITING.state:
+        await callback.message.answer("Вы не в режиме редактирования.")
+        return
+
+    # Возвращаем состояние в TESTING
+    await state.set_state(TestStates.TESTING)
+    logger.debug("State changed to TESTING after cancel_editing")
+    logger.debug("Calling send_question from cancel_editing")
+    await send_question(callback.message, state)
+
+
 async def send_question(message: types.Message, state: FSMContext):
     logger.debug("send_question called")
     user_data = await state.get_data()
     current_state = await state.get_state()
+    editing_question_id = user_data.get("editing_question_id")
     logger.debug(f"send_question: user_data={user_data}, current_state={current_state}")
 
     questions = user_data.get("questions", [])
@@ -572,23 +594,48 @@ async def send_question(message: types.Message, state: FSMContext):
     question_lines = [
         f"Вопрос {question_number}",
         f"(Оставшееся время: {time_left_str})\n",
-        current_question.question_text+"\n\n"
+        current_question.question_text,
+        "\n"
     ]
 
     editing_mode = (current_state == TestStates.EDITING.state)
-    if editing_mode:
+    # Проверяем редактируется ли именно этот вопрос
+    editing_this_question = editing_mode and editing_question_id == current_question.id
+
+    if editing_this_question:
         question_lines.append("Ответ редактируется 🔨. Напишите ответ на вопрос.\n")
+
+    # Инициализируем список кнопок
+    buttons = []
 
     if current_question.question_type == "text_input":
         current_answer = answers.get(str(current_question.id), "")
-        question_lines.append(f"Текущий ответ: {current_answer if current_answer else 'Нет ответа'}\n")
-        question_lines.append("Чтобы редактировать ответ, нажмите на кнопку ✏️ Редактировать ответ.\n\n")
+        question_lines.append(f"Текущий ответ: {current_answer if current_answer else 'Нет ответа'}\n\n")
+
+        # Если редактируем этот вопрос - кнопка отмены редактирования
+        # Иначе - кнопка редактировать ответ
+        if editing_this_question:
+            edit_button = InlineKeyboardButton(
+                text="❌ Отменить редактирование",
+                callback_data="cancel_editing"
+            )
+        else:
+            edit_button = InlineKeyboardButton(
+                text="✏️ Редактировать ответ",
+                callback_data=f"edit_answer:{current_question.id}"
+            )
+
+        # Добавляем кнопку в список кнопок
+        buttons.append([edit_button])
+
     else:
+        # Для single_choice или multiple_choice
         if current_question.question_type == "single_choice":
             question_lines.append("Выберите один вариант ответа:\n")
         elif current_question.question_type == "multiple_choice":
             question_lines.append("Выберите один или несколько вариантов ответа:\n")
 
+        option_buttons = []
         for idx, option in enumerate(current_question.options, start=1):
             if current_question.question_type == "single_choice":
                 is_selected = (str(option["id"]) == str(answers.get(str(current_question.id), "")))
@@ -601,45 +648,21 @@ async def send_question(message: types.Message, state: FSMContext):
             line = f"{idx}. {option['text']} {checkmark}"
             question_lines.append(line)
 
-    question_text = "\n".join(question_lines)
-    logger.debug(f"Raw question_text: {question_text}")
-    # Экранируем для MarkdownV2
-    safe_text = escape_markdown_v2(question_text)
-    logger.debug(f"Escaped question_text: {safe_text}")
-
-    buttons = []
-    if current_question.question_type == "text_input":
-        buttons.append([
-            InlineKeyboardButton(
-                text="✏️ Редактировать ответ",
-                callback_data=f"edit_answer:{current_question.id}"
-            )
-        ])
-
-    if current_question.question_type in ["single_choice", "multiple_choice"]:
-        option_buttons = []
-        for idx, option in enumerate(current_question.options, start=1):
-            if current_question.question_type == "single_choice":
-                is_selected = (str(option["id"]) == str(answers.get(str(current_question.id), "")))
-            elif current_question.question_type == "multiple_choice":
-                is_selected = (str(option["id"]) in str(answers.get(str(current_question.id), "")))
-            else:
-                is_selected = False
-
-            checkmark = "✅" if is_selected else ""
-            button_text = f"{idx} {checkmark}" if is_selected else f"{idx}"
-            # Экранируем текст кнопки, если нужно
-            button_text = escape_markdown_v2(button_text)
+            # Добавляем кнопку для этого варианта ответа
+            button_text = f"{idx} {checkmark}"
             option_buttons.append(
                 InlineKeyboardButton(
                     text=button_text,
                     callback_data=f"answer:{option['id']}"
                 )
             )
+
+        # Добавляем ряд кнопок с вариантами ответа
         buttons.append(option_buttons)
 
-    prev_callback = "noop" if editing_mode else "navigate:prev"
-    next_callback = "noop" if editing_mode else "navigate:next"
+    # Кнопки навигации и завершения
+    prev_callback = "noop" if editing_this_question else "navigate:prev"
+    next_callback = "noop" if editing_this_question else "navigate:next"
 
     navigation_buttons = []
     if current_index > 0:
@@ -657,22 +680,24 @@ async def send_question(message: types.Message, state: FSMContext):
     if navigation_buttons:
         buttons.append(navigation_buttons)
 
+    question_text = "\n".join(question_lines)
+    logger.debug(f"Raw question_text: {question_text}")
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
     message_id = user_data.get("message_id")
-    logger.debug(f"send_question: message_id={message_id}, editing_mode={editing_mode}")
+    logger.debug(f"send_question: message_id={message_id}, editing_mode={editing_mode}, editing_this_question={editing_this_question}")
     try:
         if message_id:
             await message.bot.edit_message_text(
-                text=safe_text,
+                text=question_text,
                 chat_id=message.chat.id,
                 message_id=message_id,
-                reply_markup=keyboard,
-                parse_mode='MarkdownV2'
+                reply_markup=keyboard
             )
             logger.debug("Message edited successfully in send_question")
         else:
-            msg = await message.answer(safe_text, reply_markup=keyboard, parse_mode='MarkdownV2')
+            msg = await message.answer(question_text, reply_markup=keyboard)
             await state.update_data(message_id=msg.message_id)
             logger.debug("New message sent in send_question, message_id updated")
     except TelegramBadRequest as e:
@@ -683,6 +708,5 @@ async def send_question(message: types.Message, state: FSMContext):
             logger.debug("Sent new message without parse_mode after edit failure in send_question")
         except Exception as err:
             logger.error(f"Даже без parse_mode ошибка: {err}")
-
 
 logger.debug("test_passing.py module loaded")
