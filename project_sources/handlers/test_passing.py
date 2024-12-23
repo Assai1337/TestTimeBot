@@ -577,7 +577,7 @@ async def send_question(message: types.Message, state: FSMContext):
 
     if current_question.question_type == "text_input":
         current_answer = answers.get(str(current_question.id), "")
-        question_lines.append(f"Текущий ответ: {current_answer if current_answer else 'Нет ответа'}\n\n")
+        question_lines.append(f"Текущий ответ: {current_answer if current_answer else 'Нет ответа'}")
         if editing_this_question:
             edit_button = InlineKeyboardButton(
                 text="❌ Отменить редактирование",
