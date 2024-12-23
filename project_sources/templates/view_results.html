@@ -62,7 +62,7 @@
                             {{ attempt.user.middlename }}
                         {% endif %}
                     </td>
-                    <td>{{ attempt.user.group_rel.groupname|trim }}</td>
+                    <td>{{ attempt.user.group_rel.groupname|trim if attempt.user.group_rel else '-' }}</td>
                     <td>{{ attempt.score }} / {{ test.question_count if test.question_count else '-' }}</td>
                     <td>{{ "Сдал" if attempt.passed else "Не сдал" }}</td>
                 </tr>

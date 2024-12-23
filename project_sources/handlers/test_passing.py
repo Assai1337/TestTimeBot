@@ -636,6 +636,8 @@ async def send_question(message: types.Message, state: FSMContext):
 
     if navigation_buttons:
         buttons.append(navigation_buttons)
+    if current_index == len(questions) - 1:
+        question_lines.append("\nЧтобы завершить тест, нажмите на кнопку \"✅ Завершить тест\".")
 
     question_text = "\n".join(question_lines)
     logger.debug(f"Raw question_text: {question_text}")
