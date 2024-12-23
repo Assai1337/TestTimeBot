@@ -128,7 +128,7 @@ async def monitor_test_time(user_id: int, test_attempt_id: int, end_time: dateti
                 await state.clear()
                 logger.debug(f"State cleared for user {user_id} after auto-finishing test.")
 
-                main_menu = get_main_menu(user.username,True)
+                main_menu = get_main_menu(user.username,confirmed=True)
                 menu_text = "Вы можете выбрать следующий тест или воспользоваться другими опциями."
                 menu_text = escape_markdown_v2(menu_text)
                 await bot.send_message(
@@ -473,7 +473,7 @@ async def confirm_finish_yes(callback: types.CallbackQuery, state: FSMContext, s
     except TelegramBadRequest as e:
         logger.error(f"Ошибка при редактировании кнопок после завершения теста: {e}")
 
-    main_menu = get_main_menu(user.username,True)
+    main_menu = get_main_menu(user.username,confirmed=True)
     menu_text = "Вы можете выбрать следующий тест или воспользоваться другими опциями."
     menu_text = escape_markdown_v2(menu_text)
     await callback.message.answer(
