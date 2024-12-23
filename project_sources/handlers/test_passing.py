@@ -56,7 +56,7 @@ async def monitor_test_time(user_id: int, test_attempt_id: int, end_time: dateti
     async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
     now = current_time()
-    delay = (end_time - now).total_seconds()-30
+    delay = (end_time - now).total_seconds()
     logger.debug(f"Computed delay: {delay} seconds")
     if delay > 0:
         await asyncio.sleep(delay)
@@ -128,7 +128,7 @@ async def monitor_test_time(user_id: int, test_attempt_id: int, end_time: dateti
                 await state.clear()
                 logger.debug(f"State cleared for user {user_id} after auto-finishing test.")
 
-                main_menu = get_main_menu(user.username)
+                main_menu = get_main_menu(user.username,True)
                 menu_text = "Вы можете выбрать следующий тест или воспользоваться другими опциями."
                 menu_text = escape_markdown_v2(menu_text)
                 await bot.send_message(
@@ -473,7 +473,7 @@ async def confirm_finish_yes(callback: types.CallbackQuery, state: FSMContext, s
     except TelegramBadRequest as e:
         logger.error(f"Ошибка при редактировании кнопок после завершения теста: {e}")
 
-    main_menu = get_main_menu(user.username)
+    main_menu = get_main_menu(user.username,True)
     menu_text = "Вы можете выбрать следующий тест или воспользоваться другими опциями."
     menu_text = escape_markdown_v2(menu_text)
     await callback.message.answer(

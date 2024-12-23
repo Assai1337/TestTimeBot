@@ -27,9 +27,11 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
+
 # Состояния для FSM
 class Registration(StatesGroup):
     awaiting_user_data = State()
+
 
 # Вспомогательная функция для проверки, находится ли пользователь в состоянии тестирования
 async def is_user_testing(state: FSMContext) -> bool:
@@ -41,18 +43,27 @@ async def is_user_testing(state: FSMContext) -> bool:
     ]
     return current_state in testing_states
 
+
 # Функция для создания главного меню
-def get_main_menu(username: str) -> ReplyKeyboardMarkup:
-    buttons = [
-        [KeyboardButton(text="Доступные тесты")],
-        [KeyboardButton(text="Пройденные тесты")]
-    ]
+def get_main_menu(username: str, confirmed: bool) -> ReplyKeyboardMarkup:
+    buttons = []
+
+    if confirmed:
+        buttons.append([KeyboardButton(text="Доступные тесты")])
+        buttons.append([KeyboardButton(text="Пройденные тесты")])
+
+    # Добавляем кнопку "Помощь" для всех пользователей
+    buttons.append([KeyboardButton(text="Помощь")])
+
+    # Опционально: добавление кнопки "Админ панель" для администратора
     # if username == ADMIN_USERNAME:
     #     buttons.append([KeyboardButton(text="Админ панель")])
+
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
+
 # Обработчик команды /start
-@router.message(Command(commands="start"), )
+@router.message(Command(commands="start"))
 async def start_handler(message: types.Message, state: FSMContext, session: AsyncSession):
     username = message.from_user.username
     logger.info(f"Получено сообщение /start от пользователя {username}")  # Отладочный вывод
@@ -66,15 +77,17 @@ async def start_handler(message: types.Message, state: FSMContext, session: Asyn
         result = await session.execute(select(User).where(User.username == username))
         user = result.scalars().first()
 
-        if user and user.confirmed == False:
+        if user and not user.confirmed:
+            await message.reply("Ожидайте подтверждение администратора.")
+            # Отображаем меню без кнопок "Доступные тесты" и "Пройденные тесты"
             await message.reply(
-                f"Ожидайте подтверждение администратора.",
-
+                "Ваш аккаунт еще не подтвержден. После подтверждения вы сможете получать доступ к тестам.",
+                reply_markup=get_main_menu(username, confirmed=False)
             )
-        elif user and user.confirmed == True:
+        elif user and user.confirmed:
             await message.reply(
                 f"Добро пожаловать, {user.firstname}!",
-                reply_markup=get_main_menu(username)
+                reply_markup=get_main_menu(username, confirmed=True)
             )
         else:
             await message.reply(
@@ -85,6 +98,7 @@ async def start_handler(message: types.Message, state: FSMContext, session: Asyn
     except Exception as e:
         logger.error(f"Ошибка в обработчике /start: {e}")
         await message.reply("Произошла ошибка при проверке данных. Попробуйте позже.")
+
 
 # Обработчик регистрации нового пользователя
 @router.message(Registration.awaiting_user_data)
@@ -118,7 +132,7 @@ async def register_new_user(message: types.Message, state: FSMContext, session: 
         result = await session.execute(select(User).where(User.username == username))
         existing_user = result.scalars().first()
         if existing_user:
-            await message.reply("Вы уже зарегистрированы.", reply_markup=get_main_menu(username))
+            await message.reply("Вы уже зарегистрированы.", reply_markup=get_main_menu(username, confirmed=True))
             await state.clear()
             return
 
@@ -138,9 +152,8 @@ async def register_new_user(message: types.Message, state: FSMContext, session: 
 
         await message.reply(
             f"{first_name.capitalize()}, ожидайте подтверждение от администратора.",
-            reply_markup=get_main_menu(username)
+            reply_markup=get_main_menu(username, confirmed=False)
         )
-
 
         await state.clear()
     except Exception as e:
@@ -148,35 +161,39 @@ async def register_new_user(message: types.Message, state: FSMContext, session: 
         await message.reply("Произошла ошибка при регистрации. Попробуйте позже.")
 
 
+# Обработчик кнопки "Доступные тесты"
 @router.message(lambda message: message.text == "Доступные тесты")
 async def available_tests_handler(message: types.Message, state: FSMContext, session: AsyncSession):
+    # Получаем пользователя из базы данных
+    result = await session.execute(select(User).where(User.user_id == message.from_user.id))
+    user = result.scalars().first()
+
+    if not user:
+        await message.answer("Вы не зарегистрированы. Пожалуйста, используйте команду /start для регистрации.")
+        return
+
+    if not user.confirmed:
+        await message.answer("Ваш аккаунт еще не подтвержден. Пожалуйста, дождитесь подтверждения администратора.")
+        return
+
     # Проверяем, находится ли пользователь в состоянии тестирования
     if await is_user_testing(state):
-        await message.answer("Вы сейчас проходите тест. Пожалуйста, завершите текущий тест перед тем, как начинать другой.")
+        await message.answer(
+            "Вы сейчас проходите тест. Пожалуйста, завершите текущий тест перед тем, как начинать другой.")
         return
 
     logger.info("Обработчик 'Доступные тесты' вызван")
 
     try:
-        # Получаем пользователя
-        user_result = await session.execute(select(User).where(User.user_id == message.from_user.id))
-        user = user_result.scalars().first()
-
-        if not user:
-            await message.answer("Вы не зарегистрированы. Пожалуйста, используйте команду /start для регистрации.")
-            return
-
-        logger.info(f"Пользователь: {user.firstname} {user.lastname}, Группа: {user.group}")
-
         # Текущая дата и время
-        current_time = datetime.now(ZoneInfo("Europe/Moscow")).replace(tzinfo=None)
+        current_time_val = datetime.now(ZoneInfo("Europe/Moscow")).replace(tzinfo=None)
 
         # Подготовка запроса с подсчетом попыток
         stmt = (
             select(Test, func.count(TestAttempt.id).label("attempt_count"))
             .outerjoin(TestAttempt, (Test.id == TestAttempt.test_id) & (TestAttempt.user_id == user.id))
             .where(
-                (Test.expiry_date == None) | (Test.expiry_date > current_time),
+                (Test.expiry_date == None) | (Test.expiry_date > current_time_val),
                 Test.question_count > 0
             )
             .group_by(Test.id)
@@ -223,3 +240,5 @@ async def available_tests_handler(message: types.Message, state: FSMContext, ses
     except Exception as e:
         logger.error(f"Ошибка в обработчике 'Доступные тесты': {e}")
         await message.answer("Произошла ошибка при получении тестов. Попробуйте позже.")
+
+
