@@ -27,6 +27,7 @@ class User(Base):
     lastname = Column(String, nullable=False)
     middlename = Column(String)
     group = Column(String, ForeignKey('groups.groupname'), nullable=False)  # Внешний ключ на groups.groupname
+    confirmed = Column(Boolean)
     registration_date = Column(DateTime, default=lambda: datetime.utcnow() + timedelta(hours=3))
 
     # Отношения

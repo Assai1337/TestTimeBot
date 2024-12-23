@@ -1,4 +1,4 @@
-<!-- admin_panel.html -->
+<!-- templates/admin_panel.html -->
 
 <!DOCTYPE html>
 <html lang="ru">
@@ -7,25 +7,34 @@
     <title>Панель администратора</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_panel.css') }}">
+    <!-- Подключение иконок Font Awesome для иконки кнопки -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <div class="container admin-panel">
         <h1>Панель администратора</h1>
-        <a href="{{ url_for('create_test') }}" class="btn-create">Создать новый тест</a>
+        <div class="buttons">
+            <a href="{{ url_for('create_test') }}" class="btn btn-create">
+                <i class="fas fa-plus-circle"></i> Создать новый тест
+            </a>
+            <a href="{{ url_for('registration') }}" class="btn btn-registration">
+                <i class="fas fa-user-plus"></i> Заявки на регистрацию
+            </a>
+        </div>
 
         <h2>Существующие тесты</h2>
         <table id="testsTable">
             <thead>
                 <tr>
-                    <th data-column="test_name">Название теста<span class="sort-indicator"></span></th>
-                    <th data-column="description">Описание<span class="sort-indicator"></span></th>
-                    <th data-column="groups_with_access">Группы с доступом<span class="sort-indicator"></span></th>
-                    <th data-column="creation_date">Дата создания<span class="sort-indicator"></span></th>
-                    <th data-column="expiry_date">Дата окончания<span class="sort-indicator"></span></th>
-                    <th data-column="question_count">Количество вопросов<span class="sort-indicator"></span></th>
-                    <th data-column="scores_need_to_pass">Баллы для прохождения<span class="sort-indicator"></span></th>
-                    <th data-column="duration">Длительность (минуты)<span class="sort-indicator"></span></th>
-                    <th data-column="number_of_attempts">Количество попыток<span class="sort-indicator"></span></th>
+                    <th data-column="test_name">Название теста <i class="fas fa-sort"></i></th>
+                    <th data-column="description">Описание <i class="fas fa-sort"></i></th>
+                    <th data-column="groups_with_access">Группы с доступом <i class="fas fa-sort"></i></th>
+                    <th data-column="creation_date">Дата создания <i class="fas fa-sort"></i></th>
+                    <th data-column="expiry_date">Дата окончания <i class="fas fa-sort"></i></th>
+                    <th data-column="question_count">Количество вопросов <i class="fas fa-sort"></i></th>
+                    <th data-column="scores_need_to_pass">Баллы для прохождения <i class="fas fa-sort"></i></th>
+                    <th data-column="duration">Длительность (минуты) <i class="fas fa-sort"></i></th>
+                    <th data-column="number_of_attempts">Количество попыток <i class="fas fa-sort"></i></th>
                     <th>Действия</th>
                 </tr>
             </thead>
@@ -35,23 +44,22 @@
                     <td>{{ test.test_name }}</td>
                     <td>{{ test.description or "Нет описания" }}</td>
                     <td>{{ test.groups_with_access or "Все группы" }}</td>
-
-                    <!-- Исправлено: используем test.creation_date для "Дата создания" -->
-                    <td data-value="{{ test.creation_date.strftime('%Y-%m-%dT%H:%M:%S') }}">
-                        {{ test.creation_date.strftime('%Y-%m-%d %H:%M:%S') }}
-                    </td>
-
-                    <td data-value="{{ test.expiry_date.strftime('%Y-%m-%dT%H:%M:%S+03:00') if test.expiry_date else '' }}">
-                        {{ test.expiry_date.strftime('%Y-%m-%d %H:%M:%S') if test.expiry_date else "Без окончания" }}
-                    </td>
+                    <td>{{ test.creation_date.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td>{{ test.expiry_date.strftime('%Y-%m-%d %H:%M:%S') if test.expiry_date else "Без окончания" }}</td>
                     <td>{{ test.question_count }}</td>
                     <td>{{ test.scores_need_to_pass }}</td>
                     <td>{{ test.duration }}</td>
                     <td>{{ test.number_of_attempts }}</td>
                     <td>
-                        <a href="{{ url_for('edit_test', test_id=test.id) }}" class="btn-action">Редактировать тест</a>
-                        <a href="{{ url_for('edit_questions', test_id=test.id) }}" class="btn-action">Редактировать вопросы</a>
-                        <a href="{{ url_for('view_results', test_id=test.id) }}" class="btn-action">Результаты</a>
+                        <a href="{{ url_for('edit_test', test_id=test.id) }}" class="btn-action">
+                            <i class="fas fa-edit"></i> Редактировать тест
+                        </a>
+                        <a href="{{ url_for('edit_questions', test_id=test.id) }}" class="btn-action">
+                            <i class="fas fa-question-circle"></i> Редактировать вопросы
+                        </a>
+                        <a href="{{ url_for('view_results', test_id=test.id) }}" class="btn-action">
+                            <i class="fas fa-chart-line"></i> Результаты
+                        </a>
                     </td>
                 </tr>
                 {% endfor %}

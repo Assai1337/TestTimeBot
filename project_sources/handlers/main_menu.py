@@ -52,7 +52,7 @@ def get_main_menu(username: str) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
 # Обработчик команды /start
-@router.message(Command(commands="start"))
+@router.message(Command(commands="start"), )
 async def start_handler(message: types.Message, state: FSMContext, session: AsyncSession):
     username = message.from_user.username
     logger.info(f"Получено сообщение /start от пользователя {username}")  # Отладочный вывод
@@ -66,9 +66,14 @@ async def start_handler(message: types.Message, state: FSMContext, session: Asyn
         result = await session.execute(select(User).where(User.username == username))
         user = result.scalars().first()
 
-        if user:
+        if user and user.confirmed == False:
             await message.reply(
-                f"Добро пожаловать обратно, {user.firstname}!",
+                f"Ожидайте подтверждение администратора.",
+
+            )
+        elif user and user.confirmed == True:
+            await message.reply(
+                f"Добро пожаловать, {user.firstname}!",
                 reply_markup=get_main_menu(username)
             )
         else:
@@ -125,33 +130,24 @@ async def register_new_user(message: types.Message, state: FSMContext, session: 
             middlename=middle_name.capitalize(),
             lastname=last_name.capitalize(),
             group=group_name,
+            confirmed=False,
             registration_date=datetime.now(ZoneInfo("Europe/Moscow")).replace(tzinfo=None)
         )
         session.add(new_user)
         await session.commit()
 
         await message.reply(
-            f"Регистрация завершена! Добро пожаловать, {first_name.capitalize()}.",
+            f"{first_name.capitalize()}, ожидайте подтверждение от администратора.",
             reply_markup=get_main_menu(username)
         )
+
+
         await state.clear()
     except Exception as e:
         logger.error(f"Ошибка при регистрации: {e}")
         await message.reply("Произошла ошибка при регистрации. Попробуйте позже.")
 
-# Обработчик кнопки "Админ панель"
-# @router.message(lambda message: message.text == "Админ панель")
-# async def admin_panel_handler(message: types.Message):
-#     if message.from_user.username == ADMIN_USERNAME:
-#         await message.answer(
-#             "Добро пожаловать в админ панель!\n"
-#             "[Открыть админ панель](http://localhost:5000/admin)",
-#             parse_mode="Markdown"
-#         )
-#     else:
-#         await message.answer("У вас нет доступа к админ панели.")
 
-# Обработчик кнопки "Доступные тесты" с проверкой состояния
 @router.message(lambda message: message.text == "Доступные тесты")
 async def available_tests_handler(message: types.Message, state: FSMContext, session: AsyncSession):
     # Проверяем, находится ли пользователь в состоянии тестирования

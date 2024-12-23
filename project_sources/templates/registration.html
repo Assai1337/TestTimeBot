@@ -1,0 +1,49 @@
+<!-- templates/registration.html -->
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Заявки на регистрацию</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/registration.css') }}">
+</head>
+<body>
+    <div class="container registration-page">
+        <h1>Заявки на регистрацию</h1>
+        <div class="actions">
+            <button id="select-all">Выбрать всех</button>
+            <button id="confirm-selected">Подтвердить выбранных</button>
+            <button id="delete-selected">Удалить выбранных</button>
+        </div>
+        <table id="usersTable">
+            <thead>
+                <tr>
+                    <th>Выбрать</th>
+                    <th>ID</th>
+                    <th>Username</th>
+                    <th>Имя</th>
+                    <th>Фамилия</th>
+                    <th>Отчество</th>
+                    <th>Группа</th>
+                    <th>Дата регистрации</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td><input type="checkbox" class="user-checkbox" data-user-id="{{ user.id }}"></td>
+                    <td>{{ user.id }}</td>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.firstname }}</td>
+                    <td>{{ user.lastname }}</td>
+                    <td>{{ user.middlename or "-" }}</td>
+                    <td>{{ user.group }}</td>
+                    <td>{{ user.registration_date.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <script src="{{ url_for('static', filename='js/registration_script.js') }}"></script>
+</body>
+</html>

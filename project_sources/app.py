@@ -1,7 +1,7 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session as flask_session
-from flask import make_response
+from flask import Flask, render_template, request, redirect, url_for, flash, session as flask_session,make_response, jsonify
 import pandas as pd
 from flask import abort
+
 from flask_session import Session
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker,joinedload
@@ -34,6 +34,47 @@ def admin_panel():
         tests = db_session.query(Test).all()
     return render_template('admin_panel.html', tests=tests)
 
+@app.route('/registration')
+def registration():
+    with DbSession() as db_session:
+        users = db_session.query(User).filter_by(confirmed=False).all()
+    return render_template('registration.html', users=users)
+
+
+# API-эндпоинт для подтверждения пользователей
+@app.route('/api/confirm_users', methods=['POST'])
+def confirm_users():
+    data = request.get_json()
+    user_ids = data.get('user_ids', [])
+    if not user_ids:
+        return jsonify({'success': False, 'message': 'Нет выбранных пользователей.'}), 400
+
+    with DbSession() as db_session:
+        try:
+            db_session.query(User).filter(User.id.in_(user_ids)).update({"confirmed": True}, synchronize_session=False)
+            db_session.commit()
+            return jsonify({'success': True, 'message': 'Пользователи успешно подтверждены.'}), 200
+        except Exception as e:
+            db_session.rollback()
+            return jsonify({'success': False, 'message': f'Ошибка при подтверждении пользователей: {str(e)}'}), 500
+
+
+# API-эндпоинт для удаления пользователей
+@app.route('/api/delete_users', methods=['POST'])
+def delete_users():
+    data = request.get_json()
+    user_ids = data.get('user_ids', [])
+    if not user_ids:
+        return jsonify({'success': False, 'message': 'Нет выбранных пользователей.'}), 400
+
+    with DbSession() as db_session:
+        try:
+            db_session.query(User).filter(User.id.in_(user_ids)).delete(synchronize_session=False)
+            db_session.commit()
+            return jsonify({'success': True, 'message': 'Пользователи успешно удалены.'}), 200
+        except Exception as e:
+            db_session.rollback()
+            return jsonify({'success': False, 'message': f'Ошибка при удалении пользователей: {str(e)}'}), 500
 
 # Создание теста - страница с формой
 @app.route('/create_test', methods=['GET', 'POST'])
