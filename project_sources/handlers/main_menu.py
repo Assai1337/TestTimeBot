@@ -82,12 +82,12 @@ async def start_handler(message: types.Message, state: FSMContext, session: Asyn
             # Отображаем меню без кнопок "Доступные тесты" и "Пройденные тесты"
             await message.reply(
                 "Ваш аккаунт еще не подтвержден. После подтверждения вы сможете получать доступ к тестам.",
-                reply_markup=get_main_menu(username, confirmed=False)
+                reply_markup=get_main_menu(username, False)
             )
         elif user and user.confirmed:
             await message.reply(
                 f"Добро пожаловать, {user.firstname}!",
-                reply_markup=get_main_menu(username, confirmed=True)
+                reply_markup=get_main_menu(username, True)
             )
         else:
             await message.reply(
@@ -132,7 +132,7 @@ async def register_new_user(message: types.Message, state: FSMContext, session: 
         result = await session.execute(select(User).where(User.username == username))
         existing_user = result.scalars().first()
         if existing_user:
-            await message.reply("Вы уже зарегистрированы.", reply_markup=get_main_menu(username, confirmed=True))
+            await message.reply("Вы уже зарегистрированы.", reply_markup=get_main_menu(username, True))
             await state.clear()
             return
 
@@ -152,7 +152,7 @@ async def register_new_user(message: types.Message, state: FSMContext, session: 
 
         await message.reply(
             f"{first_name.capitalize()}, ожидайте подтверждение от администратора.",
-            reply_markup=get_main_menu(username, confirmed=False)
+            reply_markup=get_main_menu(username, False)
         )
 
         await state.clear()

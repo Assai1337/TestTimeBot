@@ -841,7 +841,7 @@ async def back_to_main_menu(callback: types.CallbackQuery, session: AsyncSession
         return
 
     # Отправка главного меню как нового сообщения с InlineKeyboardMarkup
-    main_menu = get_main_menu(user.username, confirmed=True)
+    main_menu = get_main_menu(user.username, True)
     try:
         await callback.message.delete()  # Удаляем предыдущее сообщение
     except TelegramBadRequest:
