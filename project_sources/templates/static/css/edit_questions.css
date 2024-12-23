@@ -14,11 +14,6 @@ body {
     box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
 }
 
-h2 {
-    text-align: center;
-    color: #333;
-    margin-bottom: 20px;
-}
 
 table {
     width: 100%;
@@ -30,6 +25,9 @@ table th, table td {
     padding: 15px;
     text-align: left;
     border-bottom: 1px solid #e3e3e3;
+    word-wrap: break-word;
+    white-space: normal;
+    max-width: 300px; /* Ограничение ширины ячеек */
 }
 
 table th {
@@ -74,4 +72,14 @@ table tr:hover {
 
 .btn-back:hover {
     background-color: #0056b3;
+}
+h2 {
+    text-align: center;
+    color: #333;
+    margin-bottom: 20px;
+    word-wrap: break-word;
+    white-space: normal;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
