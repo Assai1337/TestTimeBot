@@ -52,12 +52,6 @@ def get_main_menu(username: str, confirmed: bool) -> ReplyKeyboardMarkup:
         buttons.append([KeyboardButton(text="Доступные тесты")])
         buttons.append([KeyboardButton(text="Пройденные тесты")])
 
-    # Добавляем кнопку "Помощь" для всех пользователей
-    buttons.append([KeyboardButton(text="Помощь")])
-
-    # Опционально: добавление кнопки "Админ панель" для администратора
-    # if username == ADMIN_USERNAME:
-    #     buttons.append([KeyboardButton(text="Админ панель")])
 
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 

@@ -841,14 +841,14 @@ async def back_to_main_menu(callback: types.CallbackQuery, session: AsyncSession
         return
 
     # Отправка главного меню как нового сообщения с InlineKeyboardMarkup
-    main_menu = get_main_menu(user.username, True)
+
     try:
         await callback.message.delete()  # Удаляем предыдущее сообщение
     except TelegramBadRequest:
         logger.warning("Предыдущее сообщение не удалось удалить.")
     await callback.message.answer(
         f"Добро пожаловать обратно, {user.firstname}!",
-        reply_markup=main_menu
+        reply_markup=get_main_menu(user.username, True)
     )
     await state.clear()
 
