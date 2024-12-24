@@ -35,6 +35,16 @@ services:
       - BOT_TOKEN
       - ADMIN_CHAT_ID
       - ADMIN_USERNAME
+  apply-migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migration-tool
+    restart: always
+    networks:
+      - default
+    environment:
+      - DATABASE_URL=psql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
   postgres:
     image: postgres
     restart: always
@@ -46,7 +56,9 @@ services:
       - POSTGRES_DB
     volumes:
       - db-data:/var/lib/postgresql/data
+
 networks:
   default:
+
 volumes:
   db-data:
