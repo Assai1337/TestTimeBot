@@ -48,3 +48,5 @@ services:
       - db-data:/var/lib/postgresql/data
 networks:
   default:
+volumes:
+  db-data:
