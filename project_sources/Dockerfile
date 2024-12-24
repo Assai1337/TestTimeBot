@@ -12,6 +12,6 @@ FROM base AS bot
 
 CMD ["python", "bot.py"]
 
-FROM nase AS web
+FROM base AS web
 
 CMD ["flash", "run", "--host=0.0.0.0", "--port=5000"]
