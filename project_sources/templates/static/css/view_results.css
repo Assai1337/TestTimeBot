@@ -14,8 +14,13 @@
 /* Заголовок страницы */
 .container h2 {
     text-align: center;
-    margin-bottom: 30px;
-    color: #2c3e50;
+    color: #333;
+    margin-bottom: 20px;
+    word-wrap: break-word;
+    white-space: normal;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Форма фильтрации */

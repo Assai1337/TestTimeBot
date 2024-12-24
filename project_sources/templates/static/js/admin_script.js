@@ -89,19 +89,19 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
 function highlightExpiredTests() {
-    // Получаем текущее время в миллисекундах с начала эпохи
+    // Получаем текущее время
     const currentTime = new Date().getTime();
 
     rows.forEach(row => {
         const expiryDateCell = row.cells[getColumnIndex('expiry_date')];
-        const expiryDateValue = expiryDateCell.getAttribute('data-value');
+        const expiryDateText = expiryDateCell.textContent.trim();
 
-        if (expiryDateValue) {
-            // Парсим дату окончания с учётом часового пояса
-            const expiryDate = new Date(expiryDateValue);
-            const expiryTime = expiryDate.getTime();
+        // Проверяем, есть ли дата окончания и она не равна "Без окончания"
+        if (expiryDateText && expiryDateText !== "Без окончания") {
+            const expiryDate = new Date(expiryDateText);
 
-            if (expiryTime < currentTime) {
+            // Если дата истекла, добавляем класс
+            if (expiryDate.getTime() < currentTime) {
                 row.classList.add('expired-test');
             } else {
                 row.classList.remove('expired-test');
@@ -109,6 +109,7 @@ function highlightExpiredTests() {
         }
     });
 }
+
 
 
     // Сортируем таблицу по дате создания при загрузке страницы (в порядке убывания)

@@ -73,11 +73,8 @@ async def start_handler(message: types.Message, state: FSMContext, session: Asyn
 
         if user and not user.confirmed:
             await message.reply("Ожидайте подтверждение администратора.")
-            # Отображаем меню без кнопок "Доступные тесты" и "Пройденные тесты"
-            await message.reply(
-                "Ваш аккаунт еще не подтвержден. После подтверждения вы сможете получать доступ к тестам.",
-                reply_markup=get_main_menu(username, False)
-            )
+
+
         elif user and user.confirmed:
             await message.reply(
                 f"Добро пожаловать, {user.firstname}!",
