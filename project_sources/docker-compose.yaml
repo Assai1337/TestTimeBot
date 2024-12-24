@@ -31,7 +31,7 @@ services:
     networks:
       - default
     environment:
-      - DATABASE_URL=psql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - BOT_TOKEN
       - ADMIN_CHAT_ID
       - ADMIN_USERNAME
@@ -40,11 +40,10 @@ services:
       context: .
       dockerfile: Dockerfile
       target: migration-tool
-    restart: always
     networks:
       - default
     environment:
-      - DATABASE_URL=psql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
   postgres:
     image: postgres
     restart: always
