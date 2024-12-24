@@ -1,0 +1,39 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    restart: always
+    networks:
+      - default
+    environment:
+      - DATABASE_URL
+  nginx:
+    image: nginx
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - web
+    networks:
+      - default
+    environment:
+      - DOMAIN
+    volumes:
+      - ./default.conf.template:/etc/nginx/templates/default.conf.template:ro
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: bot
+    restart: always
+    networks:
+      - default
+    environment:
+      - DATABASE_URL
+      - BOT_TOKEN
+      - ADMIN_CHAT_ID
+      - ADMIN_USERNAME
+networks:
+  default:
